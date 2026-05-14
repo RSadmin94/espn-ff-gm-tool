@@ -15,7 +15,7 @@
  */
 
 import { z } from "zod";
-import { router, publicProcedure, protectedProcedure } from "./_core/trpc";
+import { router, subscribedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import {
   buildWeeklyAssessment,
@@ -82,7 +82,7 @@ export const weeklyAssessmentRouter = router({
    * Expensive — runs 14+ LLM calls sequentially. Cached for 30 minutes.
    * Use this to populate the Weekly Intelligence hub and Command Center.
    */
-  fullReport: publicProcedure
+  fullReport: subscribedProcedure
     .input(z.object({
       season: z.number().default(2025),
       forceRefresh: z.boolean().default(false),
@@ -105,7 +105,7 @@ export const weeklyAssessmentRouter = router({
    * Faster than fullReport — only runs one LLM call.
    * Use when user clicks into a specific opponent's profile.
    */
-  teamBrief: publicProcedure
+  teamBrief: subscribedProcedure
     .input(z.object({
       teamId: z.number(),
       season: z.number().default(2025),
@@ -199,7 +199,7 @@ export const weeklyAssessmentRouter = router({
    * Returns ranked cross-team opportunities without full LLM narratives.
    * Use in the Command Center war room quick-launch panel.
    */
-  rodOpportunities: publicProcedure
+  rodOpportunities: subscribedProcedure
     .input(z.object({ season: z.number().default(2025) }))
     .query(async ({ input }) => {
       return buildRodOpportunityBoard(input.season);
@@ -210,7 +210,7 @@ export const weeklyAssessmentRouter = router({
    * Returns standings + desperation scores + last week results for all 14 teams.
    * Use for the Command Center threat assessment board.
    */
-  leaguePulse: publicProcedure
+  leaguePulse: subscribedProcedure
     .input(z.object({ season: z.number().default(2025) }))
     .query(({ input }) => {
       return memCache(`leaguePulse:${input.season}`, 5 * 60_000, async () => {
@@ -326,7 +326,7 @@ export const weeklyAssessmentRouter = router({
    * Returns a jobId immediately; poll batchStatus with the jobId for progress.
    * The job runs asynchronously in the background (fire-and-forget Promise).
    */
-  batchRunAssessment: publicProcedure
+  batchRunAssessment: subscribedProcedure
     .input(z.object({ season: z.number().default(2025) }))
     .mutation(async ({ input }) => {
       pruneBatchJobs();
@@ -421,7 +421,7 @@ export const weeklyAssessmentRouter = router({
    * Poll the status of a batch assessment job.
    * Call every 2-3 seconds while the job is running.
    */
-  batchStatus: publicProcedure
+  batchStatus: subscribedProcedure
     .input(z.object({ jobId: z.string() }))
     .query(({ input }) => {
       const job = batchJobs.get(input.jobId);

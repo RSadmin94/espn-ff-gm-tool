@@ -8,6 +8,8 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
+import { PAYWALL_ERR_MSG } from "@shared/const";
+import { safeErrorMessage } from "@/lib/paywall";
 
 const DAILY_BUDGET = 50_000;
 
@@ -118,6 +120,9 @@ export default function AdvisorPanel({ open, onClose }: AdvisorPanelProps) {
       });
 
       if (!resp.ok) {
+        if (resp.status === 403) {
+          throw new Error(PAYWALL_ERR_MSG);
+        }
         const errText = await resp.text();
         throw new Error(errText || `HTTP ${resp.status}`);
       }
@@ -173,7 +178,7 @@ export default function AdvisorPanel({ open, onClose }: AdvisorPanelProps) {
       utils.advisor.history.invalidate({ season });
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
-      toast.error(err instanceof Error ? err.message : "Stream failed");
+      toast.error(safeErrorMessage(err, "Stream failed"));
       setStreamingMessages((prev) => prev.filter((m) => !m.streaming));
     } finally {
       setIsStreaming(false);

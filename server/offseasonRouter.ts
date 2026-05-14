@@ -10,7 +10,7 @@
  */
 
 import { z } from "zod";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { protectedProcedure, router, subscribedProcedure } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { buildKeeperRecommendations } from "./keeperRecommendationEngine";
 import { buildLeagueDraftBoard } from "./draftStrategyEngine";
@@ -27,7 +27,7 @@ async function getSeasonData(season: number) {
 
 export const offseasonRouter = router({
   // ── All 14 teams: DNA-powered keeper recommendations ─────────────────────
-  keeperRecommendations: protectedProcedure.query(async () => {
+  keeperRecommendations: subscribedProcedure.query(async () => {
     const { calcLeagueDNA } = await import("./leagueDNA");
     const { buildManagerRawData } = await import("./dnaRouter");
 
@@ -205,7 +205,7 @@ export const offseasonRouter = router({
   }),
 
   // ── 2026 draft strategy board ─────────────────────────────────────────────
-  draftBoard: protectedProcedure.query(async () => {
+  draftBoard: subscribedProcedure.query(async ({ ctx }) => {
     const { calcLeagueDNA } = await import("./leagueDNA");
     const { buildManagerRawData } = await import("./dnaRouter");
 
@@ -224,7 +224,7 @@ export const offseasonRouter = router({
     const dnaProfiles = calcLeagueDNA(managers);
 
     // Get keeper recommendations (reuse the same logic)
-    const keeperResult = await offseasonRouter.createCaller({} as never).keeperRecommendations();
+    const keeperResult = await offseasonRouter.createCaller(ctx).keeperRecommendations();
     const keeperRecommendations = keeperResult.teams;
 
     // Get 2026 draft order and team names from leagueIdentity (live ESPN, cached in DB)
@@ -298,7 +298,7 @@ export const offseasonRouter = router({
   }),
 
   // ── Single team: LLM-generated keeper + draft brief ───────────────────────
-  teamKeeperBrief: protectedProcedure
+  teamKeeperBrief: subscribedProcedure
     .input(z.object({ teamId: z.number(), teamName: z.string() }))
     .mutation(async ({ input }) => {
       const { calcLeagueDNA, buildDNAPromptBlock } = await import("./leagueDNA");

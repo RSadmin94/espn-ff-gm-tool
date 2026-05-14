@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
+import { safeErrorMessage } from "@/lib/paywall";
 
 // ─── Types (mirrors server interfaces) ───────────────────────────────────────
 
@@ -761,7 +762,7 @@ export default function WeeklyIntelligence() {
       toast.info(`Batch started — assessing ${result.teamCount} teams…`);
     },
     onError: (err) => {
-      toast.error(`Batch failed: ${err.message}`);
+      toast.error(safeErrorMessage(err, "Batch failed."));
     },
   });
 

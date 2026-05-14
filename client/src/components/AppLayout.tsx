@@ -9,6 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import AdvisorPanel from "./AdvisorPanel";
+import PaywallPrompt from "./PaywallPrompt";
 
 type NavItem = {
   href: string;
@@ -126,6 +127,10 @@ export default function AppLayout({ children, title, subtitle, headerRight }: Ap
   const [location] = useLocation();
   const alreadyInsideLayout = useContext(InsideLayoutContext);
   const [advisorOpen, setAdvisorOpen] = useState(false);
+  const subscriptionStatus = trpc.billing.getSubscriptionStatus.useQuery(undefined, {
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
 
   // Listen for Chrome extension toolbar click → open advisor panel
   useEffect(() => {
@@ -214,6 +219,9 @@ export default function AppLayout({ children, title, subtitle, headerRight }: Ap
                 {headerRight && <div>{headerRight}</div>}
               </div>
             </header>
+          )}
+          {subscriptionStatus.data && !subscriptionStatus.data.hasAccess && (
+            <PaywallPrompt compact dismissible />
           )}
           <DataHealthBanner />
           <main className="flex-1 overflow-y-auto">{children}</main>

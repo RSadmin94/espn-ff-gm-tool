@@ -29,6 +29,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { safeErrorMessage } from "@/lib/paywall";
 
 export type LogDecisionToolSource =
   | "start_sit"
@@ -107,7 +108,7 @@ export function LogDecisionButton({
       onLogged?.(data.decisionId);
     },
     onError: (err) => {
-      toast.error(`Failed to log decision: ${err.message}`);
+      toast.error(safeErrorMessage(err, "Failed to log decision."));
     },
   });
 

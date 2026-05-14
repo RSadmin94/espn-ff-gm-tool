@@ -17,7 +17,7 @@
  */
 
 import { z } from "zod";
-import { router, publicProcedure, protectedProcedure } from "./_core/trpc";
+import { router, publicProcedure, protectedProcedure, subscribedProcedure } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { TRPCError } from "@trpc/server";
 import {
@@ -63,7 +63,7 @@ export const injuryRouter = router({
   }),
 
   /** Return injury scores for a list of players. */
-  scores: publicProcedure
+  scores: subscribedProcedure
     .input(z.object({
       players: z.array(PlayerInput),
     }))
@@ -82,7 +82,7 @@ export const injuryRouter = router({
    * This replaces / augments the existing start-sit logic: call this endpoint
    * from the Waiver Lab Start/Sit tab instead of the old generic advisor.
    */
-  startSit: protectedProcedure
+  startSit: subscribedProcedure
     .input(z.object({
       playerA: PlayerInput,
       playerB: PlayerInput,
@@ -154,7 +154,7 @@ Deliver a concise START/SIT verdict. Lead with the verdict. Explain the injury m
    * Given a player name, fetches their injury data, calculates scores,
    * and generates an AI scouting report grounded in the injury facts.
    */
-  waiverScout: protectedProcedure
+  waiverScout: subscribedProcedure
     .input(z.object({
       player: PlayerInput,
       context: z.string().optional().default(""),

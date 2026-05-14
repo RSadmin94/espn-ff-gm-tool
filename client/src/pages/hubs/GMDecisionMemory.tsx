@@ -22,6 +22,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Streamdown } from "streamdown";
 import { toast } from "sonner";
+import { safeErrorMessage } from "@/lib/paywall";
 import {
   Brain,
   CheckCircle,
@@ -323,7 +324,7 @@ export default function GMDecisionMemory() {
   const memoryQuery = trpc.advisor.getMemory.useQuery();
   const updateMemoryMutation = trpc.advisor.updateMemory.useMutation({
     onSuccess: () => toast.success("GM Profile saved — the Advisor will use this in future chats"),
-    onError: (err) => toast.error(`Failed to save: ${err.message}`),
+    onError: (err) => toast.error(safeErrorMessage(err, "Failed to save.")),
   });
   const [memForm, setMemForm] = useState({
     riskTolerance: "moderate",
@@ -362,7 +363,7 @@ export default function GMDecisionMemory() {
       utils.gmDecision.getAccuracyStats.invalidate();
       utils.gmDecision.getPatternAnalysis.invalidate();
     },
-    onError: (err) => toast.error(`Failed: ${err.message}`),
+    onError: (err) => toast.error(safeErrorMessage(err, "Failed.")),
   });
 
   const handleResolve = (decisionId: number, outcome: "correct" | "incorrect" | "neutral") => {

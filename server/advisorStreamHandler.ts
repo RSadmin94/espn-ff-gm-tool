@@ -20,11 +20,20 @@ import { invokeLLMStream } from "./_core/llm";
 import { buildAdvisorMessages } from "./advisorContextBuilder";
 import { addChatMessage, getUserMemory, persistLlmUsage } from "./db";
 import { checkRateLimit, recordUsage } from "./rateLimiter";
+import { PAYWALL_ERR_MSG } from "@shared/const";
 
 const bodySchema = z.object({
   message: z.string().min(1).max(2000),
   season: z.number().optional(),
 });
+
+const TRIAL_LENGTH_MS = 7 * 24 * 60 * 60 * 1000;
+
+function hasIntelligenceAccess(user: NonNullable<Awaited<ReturnType<typeof sdk.authenticateRequest>>>) {
+  if (user.subscriptionStatus === "active") return true;
+  if (user.subscriptionStatus !== "trialing" || !user.trialStartedAt) return false;
+  return Date.now() < new Date(user.trialStartedAt).getTime() + TRIAL_LENGTH_MS;
+}
 
 export function registerAdvisorStreamRoute(app: Express) {
   app.post("/api/advisor/stream", async (req: Request, res: Response) => {
@@ -38,6 +47,10 @@ export function registerAdvisorStreamRoute(app: Express) {
     }
     if (!user) {
       res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    if (!hasIntelligenceAccess(user)) {
+      res.status(403).json({ error: PAYWALL_ERR_MSG });
       return;
     }
 

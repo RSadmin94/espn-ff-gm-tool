@@ -5,7 +5,7 @@
  * retrieving the decision feed, and getting retrospective analysis.
  */
 import { z } from "zod";
-import { router, protectedProcedure, publicProcedure } from "./_core/trpc";
+import { router, subscribedProcedure } from "./_core/trpc";
 import {
   logDecision,
   resolveOutcome,
@@ -17,7 +17,7 @@ import {
 
 export const gmDecisionRouter = router({
   // ── Log a new decision ──────────────────────────────────────────────────────
-  logDecision: protectedProcedure
+  logDecision: subscribedProcedure
     .input(
       z.object({
         toolSource: z.enum([
@@ -58,7 +58,7 @@ export const gmDecisionRouter = router({
     }),
 
   // ── Resolve outcome of a decision ──────────────────────────────────────────
-  resolveOutcome: protectedProcedure
+  resolveOutcome: subscribedProcedure
     .input(
       z.object({
         decisionId: z.number().int().positive(),
@@ -73,7 +73,7 @@ export const gmDecisionRouter = router({
     }),
 
   // ── Get decision feed ───────────────────────────────────────────────────────
-  getDecisionFeed: publicProcedure
+  getDecisionFeed: subscribedProcedure
     .input(
       z.object({
         season: z.number().int().optional(),
@@ -92,21 +92,21 @@ export const gmDecisionRouter = router({
     }),
 
   // ── Get accuracy stats ──────────────────────────────────────────────────────
-  getAccuracyStats: publicProcedure
+  getAccuracyStats: subscribedProcedure
     .input(z.object({ season: z.number().int().optional() }).optional())
     .query(async ({ input }) => {
       return getAccuracyStats(input?.season);
     }),
 
   // ── Get pattern analysis ────────────────────────────────────────────────────
-  getPatternAnalysis: publicProcedure
+  getPatternAnalysis: subscribedProcedure
     .input(z.object({ season: z.number().int().optional() }).optional())
     .query(async ({ input }) => {
       return getPatternAnalysis(input?.season);
     }),
 
   // ── Get LLM retrospective analysis ─────────────────────────────────────────
-  getRetrospective: publicProcedure
+  getRetrospective: subscribedProcedure
     .input(z.object({ season: z.number().int().optional() }).optional())
     .query(async ({ input }) => {
       const analysis = await getRetrospectiveAnalysis(input?.season);
@@ -114,7 +114,7 @@ export const gmDecisionRouter = router({
     }),
 
   // ── Delete a decision ───────────────────────────────────────────────────────
-  deleteDecision: protectedProcedure
+  deleteDecision: subscribedProcedure
     .input(z.object({ decisionId: z.number().int().positive() }))
     .mutation(async ({ input }) => {
       const { getDb } = await import("./db");

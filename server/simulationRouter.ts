@@ -15,7 +15,7 @@
  */
 
 import { z } from "zod";
-import { router, publicProcedure, protectedProcedure } from "./_core/trpc";
+import { router, subscribedProcedure } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import {
   simulatePlayer,
@@ -169,7 +169,7 @@ export const simulationRouter = router({
    *
    * Use on the Draft Board, Player Profiles, and Waiver Intel cards.
    */
-  playerOutcome: publicProcedure
+  playerOutcome: subscribedProcedure
     .input(SimPlayerInput)
     .query(async ({ input }) => {
       const [enriched] = await enrichWithInjury([input as SimPlayer]);
@@ -188,7 +188,7 @@ export const simulationRouter = router({
    * Also calls the LLM with the simulation facts injected as ground truth,
    * producing an AI verdict grounded in the probability numbers.
    */
-  startSit: protectedProcedure
+  startSit: subscribedProcedure
     .input(z.object({
       playerA: SimPlayerInput,
       playerB: SimPlayerInput,
@@ -339,7 +339,7 @@ Deliver a concise START/SIT verdict:
    * Full two-lineup matchup simulation.
    * Used in the Command Center War Room for weekly win probability display.
    */
-  matchup: protectedProcedure
+  matchup: subscribedProcedure
     .input(z.object({
       myLineup: z.array(SimPlayerInput),
       opponentLineup: z.array(SimPlayerInput),
@@ -368,7 +368,7 @@ Deliver a concise START/SIT verdict:
    *
    * Use in the War Room for the weekly pre-lock briefing.
    */
-  lineupCheck: protectedProcedure
+  lineupCheck: subscribedProcedure
     .input(z.object({
       myLineup: z.array(SimPlayerInput),
       opponentLineup: z.array(SimPlayerInput).optional().default([]),
