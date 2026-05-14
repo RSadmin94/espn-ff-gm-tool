@@ -23,6 +23,8 @@ type RevealProfile = {
   exploitabilityLabel: ManagerDNA["exploitabilityLabel"];
 };
 
+type ProfileStage = 0 | 1 | 2 | 3;
+
 const PROFILE_VIEW_EVENTS = {
   0: "viewed_self_profile",
   1: "viewed_champion_profile",
@@ -30,8 +32,8 @@ const PROFILE_VIEW_EVENTS = {
   3: "viewed_locked_profiles",
 } as const;
 
-function clampProfile(profile: number) {
-  return Math.max(0, Math.min(3, profile));
+function clampProfile(profile: number): ProfileStage {
+  return Math.max(0, Math.min(3, profile)) as ProfileStage;
 }
 
 function normalizeName(value: string | null | undefined) {
