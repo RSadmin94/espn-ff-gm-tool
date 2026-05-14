@@ -11,6 +11,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
+import { safeErrorMessage } from "@/lib/paywall";
 
 const SUGGESTED_PROMPTS = [
   "Who are my biggest threats heading into 2026 and how do I neutralize them?",
@@ -35,7 +36,7 @@ export default function Advisor() {
       utils.advisor.history.invalidate({ season });
       setMessage("");
     },
-    onError: (err) => toast.error(err.message || "Failed to get response"),
+    onError: (err) => toast.error(safeErrorMessage(err, "Failed to get response")),
   });
 
   const clearMutation = trpc.advisor.clearHistory.useMutation({

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
+import { safeErrorMessage } from "@/lib/paywall";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -572,7 +573,7 @@ export default function OffseasonHub() {
       }
     },
     onError: (err) => {
-      toast.error(err.message || "Refresh failed. Check ESPN credentials.");
+      toast.error(safeErrorMessage(err, "Refresh failed. Check ESPN credentials."));
     },
   });
 

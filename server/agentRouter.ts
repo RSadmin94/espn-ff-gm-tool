@@ -16,7 +16,7 @@
  */
 
 import { z } from "zod";
-import { router, protectedProcedure, publicProcedure } from "./_core/trpc";
+import { router, subscribedProcedure } from "./_core/trpc";
 import { runAgentDebate, buildAgentContext } from "./agentWarRoom";
 import { getInjuries, calcInjuryScores, buildInjuryPromptBlock } from "./injuryService";
 import { buildDNAPromptBlock, calcLeagueDNA } from "./leagueDNA";
@@ -70,7 +70,7 @@ export const agentRouter = router({
    *
    * Returns: verdicts from all 5 agents + consensus + disagreements
    */
-  startSit: protectedProcedure
+  startSit: subscribedProcedure
     .input(z.object({
       playerA: z.object({ name: z.string(), position: z.string(), projectedPoints: z.number().optional() }),
       playerB: z.object({ name: z.string(), position: z.string(), projectedPoints: z.number().optional() }),
@@ -117,7 +117,7 @@ export const agentRouter = router({
    * Most useful for close trades where you're unsure — the disagreement
    * reveals the tradeoffs.
    */
-  trade: protectedProcedure
+  trade: subscribedProcedure
     .input(z.object({
       /** What Rod is giving up */
       giving: z.array(z.object({ name: z.string(), position: z.string() })),
@@ -163,7 +163,7 @@ export const agentRouter = router({
    * Keeper Agent has maximum weight here — but other agents ensure the
    * weekly and playoff implications aren't ignored.
    */
-  keeper: protectedProcedure
+  keeper: subscribedProcedure
     .input(z.object({
       playerA: z.object({
         name: z.string(),
@@ -213,7 +213,7 @@ export const agentRouter = router({
    * Designed for use during the Mock Draft Simulator or live draft day.
    * Pass the current board state and the agents will debate the best pick.
    */
-  draftPick: protectedProcedure
+  draftPick: subscribedProcedure
     .input(z.object({
       round: z.number(),
       pickNumber: z.number(),
@@ -255,7 +255,7 @@ export const agentRouter = router({
    * Free-form — any strategic question can be debated by all 5 agents.
    * Used by the GM Advisor chat as an optional "get 5 opinions" mode.
    */
-  openQuestion: publicProcedure
+  openQuestion: subscribedProcedure
     .input(z.object({
       question: z.string().min(10).max(500),
       optionA: z.string(),

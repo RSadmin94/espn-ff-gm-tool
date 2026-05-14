@@ -26,7 +26,7 @@
  */
 
 import { z } from "zod";
-import { router, publicProcedure, protectedProcedure } from "./_core/trpc";
+import { router, subscribedProcedure } from "./_core/trpc";
 import {
   getBacktestSummary,
   calcStartSitAccuracy,
@@ -50,49 +50,49 @@ import {
 export const backtestingRouter = router({
   // ── Read endpoints ──────────────────────────────────────────────────────────
 
-  summary: publicProcedure
+  summary: subscribedProcedure
     .input(z.object({ season: z.number().optional() }))
     .query(async ({ input }) => {
       return getBacktestSummary(input.season);
     }),
 
-  startSitAccuracy: publicProcedure
+  startSitAccuracy: subscribedProcedure
     .input(z.object({ season: z.number().optional() }))
     .query(async ({ input }) => {
       return calcStartSitAccuracy(input.season);
     }),
 
-  monteCarloCalibration: publicProcedure
+  monteCarloCalibration: subscribedProcedure
     .input(z.object({ season: z.number().optional() }))
     .query(async ({ input }) => {
       return calcMonteCarloCalibration(input.season);
     }),
 
-  tradeReport: publicProcedure
+  tradeReport: subscribedProcedure
     .input(z.object({ season: z.number().optional() }))
     .query(async ({ input }) => {
       return calcTradeDecisionReport(input.season);
     }),
 
-  champEquityReport: publicProcedure
+  champEquityReport: subscribedProcedure
     .input(z.object({ season: z.number().optional() }))
     .query(async ({ input }) => {
       return calcChampEquityReport(input.season);
     }),
 
-  startSitList: publicProcedure
+  startSitList: subscribedProcedure
     .input(z.object({ season: z.number().optional() }))
     .query(async ({ input }) => {
       return getStartSitDecisions(input.season);
     }),
 
-  tradeList: publicProcedure
+  tradeList: subscribedProcedure
     .input(z.object({ season: z.number().optional() }))
     .query(async ({ input }) => {
       return getTradeDecisions(input.season);
     }),
 
-  mcList: publicProcedure
+  mcList: subscribedProcedure
     .input(z.object({ season: z.number().optional() }))
     .query(async ({ input }) => {
       return getMonteCarloPredictions(input.season);
@@ -100,7 +100,7 @@ export const backtestingRouter = router({
 
   // ── Write endpoints ─────────────────────────────────────────────────────────
 
-  logStartSit: protectedProcedure
+  logStartSit: subscribedProcedure
     .input(
       z.object({
         season: z.number(),
@@ -135,7 +135,7 @@ export const backtestingRouter = router({
       return { id };
     }),
 
-  resolveStartSit: protectedProcedure
+  resolveStartSit: subscribedProcedure
     .input(
       z.object({
         id: z.number(),
@@ -152,14 +152,14 @@ export const backtestingRouter = router({
       return { outcome };
     }),
 
-  autoResolveStartSit: protectedProcedure
+  autoResolveStartSit: subscribedProcedure
     .input(z.object({ season: z.number(), week: z.number() }))
     .mutation(async ({ input }) => {
       const resolved = await autoResolveStartSitFromCache(input.season, input.week);
       return { resolved };
     }),
 
-  logTrade: protectedProcedure
+  logTrade: subscribedProcedure
     .input(
       z.object({
         season: z.number(),
@@ -188,7 +188,7 @@ export const backtestingRouter = router({
       return { id };
     }),
 
-  updateTrade: protectedProcedure
+  updateTrade: subscribedProcedure
     .input(
       z.object({
         id: z.number(),
@@ -203,7 +203,7 @@ export const backtestingRouter = router({
       return { success: true };
     }),
 
-  logMonteCarlo: protectedProcedure
+  logMonteCarlo: subscribedProcedure
     .input(
       z.object({
         season: z.number(),
@@ -227,7 +227,7 @@ export const backtestingRouter = router({
       return { id };
     }),
 
-  resolveMonteCarlo: protectedProcedure
+  resolveMonteCarlo: subscribedProcedure
     .input(
       z.object({
         id: z.number(),
@@ -244,7 +244,7 @@ export const backtestingRouter = router({
       return { actualWon };
     }),
 
-  logChampEquity: protectedProcedure
+  logChampEquity: subscribedProcedure
     .input(
       z.object({
         season: z.number(),
@@ -266,7 +266,7 @@ export const backtestingRouter = router({
       return { id };
     }),
 
-  resolveChampEquity: protectedProcedure
+  resolveChampEquity: subscribedProcedure
     .input(
       z.object({
         season: z.number(),

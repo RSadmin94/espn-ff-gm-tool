@@ -680,14 +680,14 @@ export type FunnelEvent = typeof funnelEvents.$inferSelect;
 export type InsertFunnelEvent = typeof funnelEvents.$inferInsert;
 
 // ─── Onboarding State ──────────────────────────────────────────────────────────
-// Tracks which profile the user is on in the sequential reveal (0=self, 1=champion, 2=rival)
+// Tracks which profile the user is on in the sequential reveal (0=self, 1=champion, 2=rival, 3=CTA)
 export const onboardingState = mysqlTable(
   "onboarding_state",
   {
     id: int("id").autoincrement().primaryKey(),
     userId: int("userId").notNull(),
-    currentProfile: int("currentProfile").default(0).notNull(),   // 0=self, 1=champion, 2=rival
-    completedAt: timestamp("completedAt"),                         // null until all 3 profiles seen
+    currentProfile: int("currentProfile").default(0).notNull(),   // 0=self, 1=champion, 2=rival, 3=CTA
+    completedAt: timestamp("completedAt"),                         // null until CTA stage reached
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },

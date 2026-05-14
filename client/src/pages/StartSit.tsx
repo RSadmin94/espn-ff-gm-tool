@@ -156,6 +156,8 @@ import { Brain, Zap, CheckCircle, XCircle, Loader2, ChevronRight, TrendingUp, Tr
 import { Input } from "@/components/ui/input";
 import { TwoPlayerBeatPanel } from "@/components/BeatReporterPanel";
 import { LogDecisionButton } from "@/components/LogDecisionButton";
+import PaywallPrompt from "@/components/PaywallPrompt";
+import { isPaywallError, safeErrorMessage } from "@/lib/paywall";
 import {
   StartSitComparisonViz,
   SimulationLoadingSkeleton,
@@ -325,13 +327,16 @@ export default function StartSit() {
     staleTime: 30 * 60 * 1000, // 30 min
     retry: false,
   });
-  const { data: vorpData } = trpc.analytics.vorp.useQuery({ season: 2025 });
-  const { data: rosData } = trpc.analytics.rosValues.useQuery({ season: 2025, weeksRemaining: 8 });
+  const vorpQuery = trpc.analytics.vorp.useQuery({ season: 2025 });
+  const rosQuery = trpc.analytics.rosValues.useQuery({ season: 2025, weeksRemaining: 8 });
+  const { data: vorpData } = vorpQuery;
+  const { data: rosData } = rosQuery;
   // League pulse for opponent DNA context in War Room
-  const { data: pulseData } = trpc.weeklyAssessment.leaguePulse.useQuery(
+  const pulseQuery = trpc.weeklyAssessment.leaguePulse.useQuery(
     { season: 2025 },
     { staleTime: 10 * 60 * 1000, retry: false }
   );
+  const { data: pulseData } = pulseQuery;
   // Derive opponent member IDs from current week matchup
   const opponentMemberIds = useMemo(() => {
     if (!pulseData || !myTeamId) return undefined;
@@ -488,7 +493,7 @@ Be specific, data-driven, and decisive. Give a clear recommendation.`;
       });
       setWarRoomResult(res as unknown as WarRoomResult);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "War Room failed. Please try again.");
+      toast.error(safeErrorMessage(err, "War Room failed. Please try again."));
     } finally {
       setWarRoomLoading(false);
     }
@@ -503,6 +508,24 @@ Be specific, data-driven, and decisive. Give a clear recommendation.`;
     setSimResult(null);
     setWarRoomResult(null);
   };
+
+  const paywallBlocked =
+    isPaywallError(vorpQuery.error) ||
+    isPaywallError(rosQuery.error) ||
+    isPaywallError(pulseQuery.error) ||
+    isPaywallError(chatMutation.error) ||
+    isPaywallError(startSitMutation.error) ||
+    isPaywallError(warRoomMutation.error);
+
+  if (paywallBlocked) {
+    return (
+      <div className="min-h-screen bg-background p-6 flex items-center justify-center">
+        <div className="max-w-xl w-full">
+          <PaywallPrompt />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AppLayout title="Start/Sit Advisor" subtitle="AI-powered weekly lineup decisions — PPR 14-team analysis">

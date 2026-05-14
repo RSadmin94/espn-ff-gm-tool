@@ -1,6 +1,6 @@
 // FILE: server/mlRouter.ts
 import { z } from "zod";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, router, subscribedProcedure } from "./_core/trpc";
 import { getMLHealth, getMLPrediction, getMLPredictionBatch } from "./mlService";
 
 const playerInputSchema = z.object({
@@ -27,14 +27,14 @@ export const mlRouter = router({
   }),
 
   /** Get ML prediction for a single player */
-  predict: publicProcedure
+  predict: subscribedProcedure
     .input(playerInputSchema)
     .query(async ({ input }) => {
       return getMLPrediction(input);
     }),
 
   /** Get ML predictions for multiple players */
-  predictBatch: publicProcedure
+  predictBatch: subscribedProcedure
     .input(z.object({ players: z.array(playerInputSchema) }))
     .query(async ({ input }) => {
       return getMLPredictionBatch(input.players);

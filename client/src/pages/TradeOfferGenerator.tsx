@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { LogDecisionButton } from "@/components/LogDecisionButton";
+import PaywallPrompt from "@/components/PaywallPrompt";
 import { trpc } from "@/lib/trpc";
+import { isPaywallError, safeErrorMessage } from "@/lib/paywall";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -170,9 +172,13 @@ export default function TradeOfferGenerator() {
             </div>
 
             {mutation.error && (
-              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-                {mutation.error.message}
-              </div>
+              isPaywallError(mutation.error) ? (
+                <PaywallPrompt />
+              ) : (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                  {safeErrorMessage(mutation.error, "Trade offer generation failed.")}
+                </div>
+              )
             )}
           </CardContent>
         </Card>

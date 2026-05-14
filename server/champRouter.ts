@@ -17,7 +17,7 @@
  */
 
 import { z } from "zod";
-import { router, publicProcedure, protectedProcedure } from "./_core/trpc";
+import { router, subscribedProcedure } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { TRPCError } from "@trpc/server";
 import {
@@ -161,7 +161,7 @@ export const champRouter = router({
    * Runs the complete 5-metric analysis from the current season data.
    * Simulates 2,000 season paths to produce championship probability.
    */
-  fullReport: protectedProcedure
+  fullReport: subscribedProcedure
     .input(z.object({
       season: z.number().default(2025),
       simCount: z.number().min(500).max(5000).default(2000),
@@ -196,7 +196,7 @@ export const champRouter = router({
    * League-wide championship probability rankings.
    * Shows where Rod stands vs all 13 opponents.
    */
-  leagueRankings: publicProcedure
+  leagueRankings: subscribedProcedure
     .input(z.object({ season: z.number().default(2025), simCount: z.number().default(1000) }))
     .query(async ({ input }) => {
       const { teams } = await buildTeamStandings(input.season);
@@ -212,7 +212,7 @@ export const champRouter = router({
    *
    * Uses the AI to reason from the championship equity facts.
    */
-  varianceModeAdvice: protectedProcedure
+  varianceModeAdvice: subscribedProcedure
     .input(z.object({
       season: z.number().default(2025),
       specificQuestion: z.string().optional(),
@@ -268,7 +268,7 @@ Answer Rod's question using the championship equity data above as ground truth.`
    *
    * Pass the "before" and "after" roster states and get the delta in championship %.
    */
-  whatIfDelta: protectedProcedure
+  whatIfDelta: subscribedProcedure
     .input(z.object({
       season: z.number().default(2025),
       /** Roster BEFORE the decision */

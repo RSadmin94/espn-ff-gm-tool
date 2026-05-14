@@ -4,7 +4,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { TRPCError } from "@trpc/server";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router, subscribedProcedure } from "./_core/trpc";
 import { invokeLLM, type Message } from "./_core/llm";
 import { checkRateLimit, recordUsage } from "./rateLimiter";
 import { injuryRouter } from "./injuryRouter";
@@ -21,6 +21,7 @@ import { mlRouter } from "./mlRouter";
 import { weeklyAssessmentRouter } from "./weeklyAssessmentRouter";
 import { providerRouter } from "./providerRouter";
 import { billingRouter } from "./billingRouter";
+import { onboardingRouter } from "./onboardingRouter";
 import { offseasonRouter } from "./offseasonRouter";
 import { upsertLeagueIdentity } from "./leagueIdentityService";
 import { getLeagueScoringSettings, getScoringBreakdown } from "./leagueScoringService";
@@ -90,6 +91,7 @@ async function getSeasonData(season: number) {
 export const appRouter = router({
   system: systemRouter,
   billing: billingRouter,
+  onboarding: onboardingRouter,
   injury: injuryRouter,
   simulation: simulationRouter,
   dna: dnaRouter,
@@ -404,7 +406,7 @@ export const appRouter = router({
         return normalizeDraftOrder(data);
       }),
 
-    keeperAnalysis: publicProcedure.query(async () => {
+    keeperAnalysis: subscribedProcedure.query(async () => {
       // Build keeper eligibility per team with 2-consecutive-year rule
       const cachedSeasons = (await getAllCachedSeasons()).sort((a, b) => a - b);
       // Map: teamId -> list of { season, playerId, playerName, position, roundId }
@@ -503,7 +505,7 @@ export const appRouter = router({
 
       return { latestSeason, nextSeason, teams: result };
     }),
-    keeperEligibility2026: publicProcedure.query(async () => {
+    keeperEligibility2026: subscribedProcedure.query(async () => {
       // Full 2026 keeper eligibility calculator with 2-consecutive-year rule enforcement
       // Rule: a player kept in BOTH 2024 AND 2025 must return to the draft pool in 2026
       // Round cost: if kept in round R in 2025, cost to keep in 2026 = R - 1
@@ -1079,7 +1081,7 @@ export const appRouter = router({
     };
   }),
 
-  ownerCareerStats: publicProcedure.query(() => {
+  ownerCareerStats: subscribedProcedure.query(() => {
     return memCache("ownerCareerStats", 10 * 60_000, async () => {
     const cachedSeasons = await getAllCachedSeasons();
 
@@ -1401,7 +1403,7 @@ export const appRouter = router({
     }); // end memCache
   }),
 
-  ownerPredictions: protectedProcedure
+  ownerPredictions: subscribedProcedure
     .input(z.object({ memberId: z.string() }))
     .query(async ({ input }) => {
       // Fetch the full owner stats to build context
@@ -1615,7 +1617,7 @@ Generate a JSON prediction report with these exact fields:
     }),
 
   // ── Owner Self-Review (AI-generated scouting report for Rod) ────────────────
-  ownerSelfReview: protectedProcedure.query(async () => {
+  ownerSelfReview: subscribedProcedure.query(async () => {
     const prompt = `You are an expert fantasy football analyst reviewing the career of Rod Sellers, manager of "Str8FrmHell / RodZilla" in the 18-season keeper league "ATLANTAS FINEST FF" (14 teams, PPR, 1 keeper, 7-team playoffs, snake draft).
 
 Here is Rod's complete career data:
@@ -1693,7 +1695,7 @@ Respond with JSON in this exact format:
 
   // ── League Draft Tendencies ──────────────────────────────────────────────
   // Aggregates all 14 managers' draft picks by round and position from 2018-2025
-  leagueDraftTendencies: publicProcedure.query(() => {
+  leagueDraftTendencies: subscribedProcedure.query(() => {
     return memCache("leagueDraftTendencies", 10 * 60_000, async () => {
     const POS_MAP: Record<number, string> = {
       1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "D/ST", 17: "D/ST",
@@ -1948,7 +1950,7 @@ Respond with JSON in this exact format:
     return picks;
   }),
 
-  pickTradeEval: publicProcedure
+  pickTradeEval: subscribedProcedure
     .input(z.object({
       sideA: z.array(z.object({ round: z.number(), pickInRound: z.number() })),
       sideB: z.array(z.object({ round: z.number(), pickInRound: z.number() })),
@@ -2122,7 +2124,7 @@ Respond with JSON in this exact format:
     }),
 
   // Returns the 2026 draft order from ESPN
-  draftPickPortfolio: publicProcedure.query(async () => {
+  draftPickPortfolio: subscribedProcedure.query(async () => {
     const TEAMS = 14;
     const BASE = 3000;
     const K = 0.028;
@@ -2178,7 +2180,7 @@ Respond with JSON in this exact format:
     return { draftOrder, totalPicks: draftOrder.length };
   }),
 
-    opponentProfile: protectedProcedure
+    opponentProfile: subscribedProcedure
     .input(z.object({ memberId: z.string() }))
     .query(async ({ input }) => {
       const { findLiveOpponentProfile } = await import("./liveOpponentProfile");
@@ -2192,7 +2194,7 @@ Respond with JSON in this exact format:
       // Readiness check — actual generation happens via opponentScoutingReport mutation
       return { ready: true };
     }),
-  opponentScoutingReport: protectedProcedure
+  opponentScoutingReport: subscribedProcedure
     .input(z.object({ memberId: z.string() }))
     .mutation(async ({ input }) => {
       const { findLiveOpponentProfile } = await import("./liveOpponentProfile");
@@ -2241,7 +2243,7 @@ Be specific, honest, and tactical. This is a competitive scouting report, not a 
       return { report, ownerName: data.ownerName };
     }),
 
-  keeperROI: publicProcedure.query(async () => {
+  keeperROI: subscribedProcedure.query(async () => {
     // Aggregate all keeper picks across 2022-2025 with ROI analysis
     // ROI = round saved vs. what you'd have to spend in a normal draft
     // A keeper kept in round N costs round N-1 in the next draft
@@ -2415,7 +2417,7 @@ Be specific, honest, and tactical. This is a competitive scouting report, not a 
     };
   }),
 
-  tradeOfferGenerator: protectedProcedure
+  tradeOfferGenerator: subscribedProcedure
     .input(z.object({
       targetInput: z.string().min(1).max(100), // player name or pick like "2.03"
       targetType: z.enum(["player", "pick"]),
@@ -3294,7 +3296,7 @@ Generate a trade strategy and recommended approach. ${dnaPromptBlock ? "IMPORTAN
       };
     }),
   // ── Math-First Trade Analyzerr ────────────────────────────────────────────
-  tradeAnalyze: protectedProcedure
+  tradeAnalyze: subscribedProcedure
     .input(z.object({
       season: z.number(),
       sideA: z.array(z.object({
@@ -3474,7 +3476,7 @@ Provide:
     }),
 
   advisor: router({
-    chat: protectedProcedure
+    chat: subscribedProcedure
       .input(z.object({ message: z.string().min(1).max(2000), season: z.number().optional() }))
       .mutation(async ({ input, ctx }) => {
         const userId = ctx.user.id;
@@ -3656,18 +3658,18 @@ if (pickOrder.length > 0) {
         return { message: assistantMessage };
       }),
 
-    history: protectedProcedure
+    history: subscribedProcedure
       .input(z.object({ season: z.number().optional() }))
       .query(async ({ ctx, input }) => getChatHistory(ctx.user.id, input.season)),
 
-    clearHistory: protectedProcedure.mutation(async ({ ctx }) => {
+    clearHistory: subscribedProcedure.mutation(async ({ ctx }) => {
       await clearChatHistory(ctx.user.id);
       return { success: true };
     }),
-    getMemory: protectedProcedure.query(async ({ ctx }) => {
+    getMemory: subscribedProcedure.query(async ({ ctx }) => {
       return getUserMemory(ctx.user.id);
     }),
-    updateMemory: protectedProcedure
+    updateMemory: subscribedProcedure
       .input(z.object({
         riskTolerance: z.string().max(32).optional(),
         tradePhilosophy: z.string().max(1000).optional(),
@@ -3777,7 +3779,7 @@ if (pickOrder.length > 0) {
 
   // ── Analytics ─────────────────────────────────────────────────────────────
   analytics: router({
-    vorp: publicProcedure
+    vorp: subscribedProcedure
       .input(z.object({ season: z.number() }))
       .query(async ({ input }) => {
         const data = await getSeasonData(input.season);
@@ -3808,7 +3810,7 @@ if (pickOrder.length > 0) {
         return calcVORP(players);
       }),
 
-    scarcity: publicProcedure
+    scarcity: subscribedProcedure
       .input(z.object({ season: z.number() }))
       .query(async ({ input }) => {
         const data = await getSeasonData(input.season);
@@ -3867,7 +3869,7 @@ if (pickOrder.length > 0) {
         return calcPositionalScarcity(rosteredPlayers, freeAgents);
       }),
 
-    rosterGaps: publicProcedure
+    rosterGaps: subscribedProcedure
       .input(z.object({ season: z.number() }))
       .query(async ({ input }) => {
         const data = await getSeasonData(input.season);
@@ -3898,7 +3900,7 @@ if (pickOrder.length > 0) {
         return calcRosterGaps(players);
       }),
 
-    keeperEfficiency: publicProcedure
+    keeperEfficiency: subscribedProcedure
       .input(z.object({ season: z.number() }))
       .query(async ({ input }) => {
         const data = await getSeasonData(input.season);
@@ -3930,7 +3932,7 @@ if (pickOrder.length > 0) {
         return calcKeeperEfficiency(players, vorp);
       }),
 
-    managerBehavior: publicProcedure
+    managerBehavior: subscribedProcedure
       .input(z.object({ seasons: z.array(z.number()).optional() }))
       .query(async ({ input }) => {
         const cachedSeasons = input.seasons ?? await getAllCachedSeasons();
@@ -3988,7 +3990,7 @@ if (pickOrder.length > 0) {
         );
       }),
 
-    rosValues: publicProcedure
+    rosValues: subscribedProcedure
       .input(z.object({ season: z.number(), weeksRemaining: z.number().optional() }))
       .query(async ({ input }) => {
         const data = await getSeasonData(input.season);
@@ -4020,7 +4022,7 @@ if (pickOrder.length > 0) {
       }),
 
     // ── 3D PROJECTIONS ──────────────────────────────────────────────────────────
-    projections3D: publicProcedure
+    projections3D: subscribedProcedure
       .input(z.object({
         season: z.number(),
         weeksRemaining: z.number().optional().default(10),
@@ -4066,7 +4068,7 @@ if (pickOrder.length > 0) {
       }),
 
     // ── KEEPER FUTURE VALUE ─────────────────────────────────────────────────────
-    keeperFutureValue: publicProcedure
+    keeperFutureValue: subscribedProcedure
       .input(z.object({ season: z.number(), teamId: z.number().optional() }))
       .query(async ({ input }) => {
         const { calcKeeperFutureValue } = await import("./analytics_additions");
@@ -4102,7 +4104,7 @@ if (pickOrder.length > 0) {
       }),
 
     // ── STRENGTH OF SCHEDULE ────────────────────────────────────────────────────
-    strengthOfSchedule: publicProcedure
+    strengthOfSchedule: subscribedProcedure
       .input(z.object({
         season: z.number(),
         currentWeek: z.number().optional().default(1),
@@ -4145,7 +4147,7 @@ if (pickOrder.length > 0) {
       }),
 
     // ── OPPONENT OVERVALUATION ──────────────────────────────────────────────────
-    opponentOvervaluation: publicProcedure
+    opponentOvervaluation: subscribedProcedure
       .input(z.object({ seasons: z.array(z.number()).optional() }))
       .query(async ({ input }) => {
         const { calcOpponentOvervaluation } = await import("./analytics_additions");
@@ -4181,7 +4183,7 @@ if (pickOrder.length > 0) {
       }),
 
     // ── WAIVER REPLACEMENT COST ─────────────────────────────────────────────────
-    waiverReplacementCost: publicProcedure
+    waiverReplacementCost: subscribedProcedure
       .input(z.object({ season: z.number() }))
       .query(async ({ input }) => {
         const { calcWaiverReplacementCost } = await import("./analytics_additions");
@@ -4198,7 +4200,7 @@ if (pickOrder.length > 0) {
       }),
 
     // ── STRATEGY MODE CONTEXT ───────────────────────────────────────────────────
-    strategyMode: publicProcedure
+    strategyMode: subscribedProcedure
       .input(z.object({ season: z.number(), teamId: z.number(), currentWeek: z.number().optional().default(1), manualOverride: z.enum(["win_now", "long_term", "balanced"]).optional() }))
       .query(async ({ input }) => {
         const { buildStrategyModeContext } = await import("./analytics_additions");
@@ -4212,7 +4214,7 @@ if (pickOrder.length > 0) {
   }),
 
   // ── DRAFT OPTIMIZER ──────────────────────────────────────────────────────────
-  draftOptimizer: protectedProcedure
+  draftOptimizer: subscribedProcedure
     .input(z.object({
       season: z.number(),
       draftSlot: z.number().optional().default(11),
@@ -4515,7 +4517,7 @@ if (pickOrder.length > 0) {
      * Mock draft setup — returns all league owners with DNA, keeper recs, and draft order.
      * Used by MockDraftSimulator to pre-populate the setup screen.
      */
-    mockSetup: publicProcedure.query(async () => {
+    mockSetup: subscribedProcedure.query(async () => {
       const { calcLeagueDNA } = await import("./leagueDNA");
       const { buildManagerRawData } = await import("./dnaRouter");
       const { buildKeeperRecommendations } = await import("./keeperRecommendationEngine");

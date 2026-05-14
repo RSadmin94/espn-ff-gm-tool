@@ -16,7 +16,7 @@
  */
 
 import { z } from "zod";
-import { router, publicProcedure } from "./_core/trpc";
+import { router, subscribedProcedure } from "./_core/trpc";
 import { getCachedView, getAllCachedSeasons } from "./db";
 import {
   calcLeagueDNA,
@@ -190,7 +190,7 @@ export const dnaRouter = router({
    * Results are compute-intensive on first call; subsequent calls are fast
    * because ESPN data is already cached in DB.
    */
-  leagueProfiles: publicProcedure.query(async () => {
+  leagueProfiles: subscribedProcedure.query(async () => {
     const managers = await buildManagerRawData();
     const dnaProfiles = calcLeagueDNA(managers);
     return dnaProfiles;
@@ -199,7 +199,7 @@ export const dnaRouter = router({
   /**
    * Single manager DNA profile by memberId.
    */
-  managerProfile: publicProcedure
+  managerProfile: subscribedProcedure
     .input(z.object({ memberId: z.string() }))
     .query(async ({ input }) => {
       const managers = await buildManagerRawData();
@@ -216,7 +216,7 @@ export const dnaRouter = router({
    * The client should pass currentSeason data from the live ESPN rosters endpoint.
    * If not provided, returns history-based exploitability scores only.
    */
-  desperationScores: publicProcedure
+  desperationScores: subscribedProcedure
     .input(z.object({
       currentWeek: z.number().default(1),
       leagueAvgScore: z.number().default(130),
@@ -260,7 +260,7 @@ export const dnaRouter = router({
    * Is now a good time to trade with a specific manager?
    * Returns a single actionable verdict for the Trade Offer Generator.
    */
-  tradeWindow: publicProcedure
+  tradeWindow: subscribedProcedure
     .input(z.object({
       memberId: z.string(),
       currentWins: z.number(),
@@ -299,7 +299,7 @@ export const dnaRouter = router({
    *
    * Use in the Command Center War Room as the "Trade Targets" panel.
    */
-  exploitBoard: publicProcedure
+  exploitBoard: subscribedProcedure
     .input(z.object({
       currentWeek: z.number().default(1),
       leagueAvgScore: z.number().default(130),
@@ -363,7 +363,7 @@ export const dnaRouter = router({
    * DNA prompt block — returns a pre-formatted string for direct injection
    * into any AI system prompt. Used by Trade Offer Generator and GM Advisor.
    */
-  promptBlock: publicProcedure
+  promptBlock: subscribedProcedure
     .input(z.object({
       memberIds: z.array(z.string()).optional(),
     }))

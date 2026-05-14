@@ -83,8 +83,9 @@ export const billingRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe did not return a checkout URL" });
       }
 
-      // Track funnel event: clicked_cta
+      // Track funnel events for both legacy and reveal-specific funnels.
       await recordFunnelEvent({ userId, event: "clicked_cta", metadata: { priceId } });
+      await recordFunnelEvent({ userId, event: "clicked_checkout", metadata: { priceId } });
 
       return { url: session.url };
     }),
