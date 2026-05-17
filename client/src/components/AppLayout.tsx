@@ -65,7 +65,7 @@ const PROVIDER_EMOJI: Record<string, string> = {
   nfl: "🏟️",
 };
 
-// Re-export for use in CompactLeagueSwitcher
+// Alias used inside CompactLeagueSwitcher
 const HEADER_PROVIDER_EMOJI = PROVIDER_EMOJI;
 
 function DataHealthBanner() {
@@ -259,7 +259,8 @@ function CompactLeagueSwitcher() {
   const leagues = myLeagues.data ?? [];
   const activeLeague = leagues.find((l) => l.isActive) ?? leagues[0] ?? null;
 
-  if (!user || leagues.length === 0) return null;
+  // Hide when unauthenticated or only one (or zero) leagues — no point switching
+  if (!user || leagues.length <= 1) return null;
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -268,7 +269,7 @@ function CompactLeagueSwitcher() {
           <span className="text-sm flex-shrink-0">
             {HEADER_PROVIDER_EMOJI[activeLeague?.provider ?? ""] ?? "🏆"}
           </span>
-          <div className="flex-1 min-w-0 hidden sm:block">
+          <div className="flex-1 min-w-0 hidden lg:block">
             <p className="text-xs font-medium text-foreground truncate leading-tight">
               {activeLeague?.leagueName || `League ${activeLeague?.leagueId}`}
             </p>
@@ -462,8 +463,8 @@ export default function AppLayout({ children, title, subtitle, headerRight }: Ap
             {headerRight && <div className="flex-shrink-0">{headerRight}</div>}
           </div>
 
-          {/* Desktop page header */}
-          <header className="hidden lg:flex flex-shrink-0 px-8 py-4 border-b border-border bg-card/50 backdrop-blur-sm items-center justify-between">
+          {/* Desktop page header — always visible so CompactLeagueSwitcher is accessible on every page */}
+          <header className="hidden lg:flex flex-shrink-0 px-8 py-3 border-b border-border bg-card/50 backdrop-blur-sm items-center justify-between min-h-[56px]">
             <div className="flex-1">
               {title && <h1 className="text-lg font-bold text-foreground tracking-tight">{title}</h1>}
               {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}

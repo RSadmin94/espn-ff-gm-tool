@@ -9,7 +9,11 @@ type UseAuthOptions = {
 };
 
 export function useAuth(options?: UseAuthOptions) {
-  const { redirectOnUnauthenticated = false, redirectPath = getLoginUrl() } =
+  // Guard: getLoginUrl() throws if OAuth env vars are missing (e.g. local dev without secrets).
+  // Fall back to a safe no-op path so the app renders even without OAuth configured.
+  let defaultRedirectPath = "/";
+  try { defaultRedirectPath = getLoginUrl(); } catch { /* env vars not set */ }
+  const { redirectOnUnauthenticated = false, redirectPath = defaultRedirectPath } =
     options ?? {};
   const utils = trpc.useUtils();
 

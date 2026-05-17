@@ -1450,3 +1450,11 @@ This single flow determines conversion, retention, and word-of-mouth.
 - [ ] Inject enriched H2H into Opponent Intel scouting prompt (routers.ts) — full H2H history block
 - [ ] Inject enriched H2H into liveOpponentProfile.ts career object — expose via tRPC for future League Mythology use
 - [ ] Write vitest for enrichedH2HContext helper
+
+## NEW: CompactLeagueSwitcher in Header
+- [x] Add CompactLeagueSwitcher component to desktop page header (top-right)
+- [x] Show active league name + provider emoji (🏈 ESPN, 😴 Sleeper, 🟣 Yahoo) + chevron
+- [x] Dropdown lists all connected leagues with visual dot for active league + provider/season metadata
+- [x] One-click switch via trpc.league.setActive with auto cache invalidation
+- [x] Responsive: full name on lg+, emoji-only on mobile/tablet; dropdown works at all sizes
+- [x] Hide when unauthenticated or only one league connected
