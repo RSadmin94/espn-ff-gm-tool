@@ -68,11 +68,10 @@ const QUICK_PROMPTS_CHAT = [
 ];
 
 // ─── Keeper Deadline Countdown Card ──────────────────────────────────────────
-const KEEPER_DEADLINE = new Date("2026-08-18T23:59:00-04:00");
-
-function KeeperCountdownCard() {
+function KeeperCountdownCard({ keeperDeadlineMs }: { keeperDeadlineMs?: number }) {
+  if (!keeperDeadlineMs) return null; // hide when no real data
   const now = new Date();
-  const msRemaining = KEEPER_DEADLINE.getTime() - now.getTime();
+  const msRemaining = keeperDeadlineMs - now.getTime();
   const daysRemaining = Math.max(0, Math.floor(msRemaining / (1000 * 60 * 60 * 24)));
   const isPast = msRemaining <= 0;
 
@@ -683,9 +682,12 @@ export default function Dashboard() {
   // Keeper deadline countdown — keeper deadline is typically early July before the August draft
   const keeperDeadlineDate = draftOrder2026?.keeperDeadline
     ? new Date(draftOrder2026.keeperDeadline)
-    : new Date('2026-07-01T00:00:00');
-  const daysUntilKeeper = Math.max(0, Math.ceil((keeperDeadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
-  const showKeeperBanner = daysUntilKeeper <= 120;
+    : null;
+  const daysUntilKeeper = keeperDeadlineDate
+    ? Math.max(0, Math.ceil((keeperDeadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : null;
+  // Only show banner when we have real data from ESPN and deadline is within 120 days
+  const showKeeperBanner = keeperDeadlineDate !== null && daysUntilKeeper !== null && daysUntilKeeper <= 120;
 
   return (
     <AppLayout title="GM War Room" subtitle="ATLANTAS FINEST FF · Str8FrmHell, RodZilla · Rod Sellers · 2026 Season">
@@ -699,10 +701,10 @@ export default function Dashboard() {
                 <span className="text-amber-300 font-semibold text-sm">Keeper Deadline</span>
                 <span className="text-amber-200/80 text-sm ml-2">— </span>
                 <span className={`font-bold text-sm ${
-                  daysUntilKeeper <= 14 ? 'text-red-400' :
-                  daysUntilKeeper <= 30 ? 'text-orange-400' : 'text-amber-300'
+                  (daysUntilKeeper ?? 999) <= 14 ? 'text-red-400' :
+                  (daysUntilKeeper ?? 999) <= 30 ? 'text-orange-400' : 'text-amber-300'
                 }`}>{daysUntilKeeper} days remaining</span>
-                <span className="text-slate-400 text-xs ml-2">({keeperDeadlineDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})</span>
+                <span className="text-slate-400 text-xs ml-2">({keeperDeadlineDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})</span>
               </div>
             </div>
             <button
@@ -763,7 +765,7 @@ export default function Dashboard() {
                   </CardContent>
                 </Card>
               ))}
-              <KeeperCountdownCard />
+              <KeeperCountdownCard keeperDeadlineMs={draftOrder2026?.keeperDeadline} />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -883,16 +885,28 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between py-2 border-b border-border">
                     <div>
                       <p className="text-sm font-medium text-foreground">Keeper Deadline</p>
-                      <p className="text-xs text-muted-foreground">August 18, 2026</p>
+                      <p className="text-xs text-muted-foreground">
+                        {draftOrder2026?.keeperDeadline
+                          ? new Date(draftOrder2026.keeperDeadline).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+                          : <span className="text-muted-foreground/50">Sync data to view</span>}
+                      </p>
                     </div>
-                    <Countdown target={new Date("2026-08-18")} label="Keeper Deadline" />
+                    {draftOrder2026?.keeperDeadline
+                      ? <Countdown target={new Date(draftOrder2026.keeperDeadline)} label="Keeper Deadline" />
+                      : <span className="text-sm font-bold text-muted-foreground/50">—</span>}
                   </div>
                   <div className="flex items-center justify-between py-2 border-b border-border">
                     <div>
                       <p className="text-sm font-medium text-foreground">Draft Day</p>
-                      <p className="text-xs text-muted-foreground">August 29, 2026 @ 3:30 PM EDT</p>
+                      <p className="text-xs text-muted-foreground">
+                        {draftOrder2026?.draftDate
+                          ? new Date(draftOrder2026.draftDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+                          : <span className="text-muted-foreground/50">Sync data to view</span>}
+                      </p>
                     </div>
-                    <Countdown target={new Date("2026-08-29T15:30:00")} label="Draft Day" />
+                    {draftOrder2026?.draftDate
+                      ? <Countdown target={new Date(draftOrder2026.draftDate)} label="Draft Day" />
+                      : <span className="text-sm font-bold text-muted-foreground/50">—</span>}
                   </div>
                   <div className="flex items-center justify-between py-2">
                     <div>
