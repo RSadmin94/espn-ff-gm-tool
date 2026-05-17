@@ -2259,6 +2259,54 @@ export const appRouter = router({
 
         return { success: true, leagueId: testLeagueId };
       }),
+
+    // ─── testFetch — diagnostic endpoint: proves DB creds + ESPN API in one shot ───
+    testFetch: publicProcedure
+      .input(z.object({
+        leagueId: z.string().optional(),
+        season: z.number().optional(),
+      }).optional())
+      .query(async ({ ctx, input }) => {
+        const { resolveEspnCreds } = await import('./espnService');
+        const creds = await resolveEspnCreds(undefined, ctx.user?.id);
+        const leagueId = input?.leagueId || creds.leagueId || process.env.ESPN_LEAGUE_ID || "1589110";
+        const season = input?.season || 2025;
+
+        const url = `https://fantasy.espn.com/apis/v3/games/ffl/seasons/${season}/segments/0/leagues/${leagueId}?view=mSettings`;
+        let httpStatus = 0;
+        let isValidJson = false;
+        let leagueName: string | null = null;
+        let error: string | null = null;
+
+        try {
+          const res = await fetch(url, {
+            headers: { Cookie: `SWID=${creds.swid}; espn_s2=${creds.espnS2}` },
+            signal: AbortSignal.timeout(10000),
+          });
+          httpStatus = res.status;
+          if (res.ok) {
+            const data = await res.json() as Record<string, unknown>;
+            isValidJson = true;
+            const settings = (data.settings as Record<string, unknown>) || {};
+            leagueName = String(settings.name || '');
+          }
+        } catch (err) {
+          error = err instanceof Error ? err.message : String(err);
+        }
+
+        return {
+          httpStatus,
+          isValidJson,
+          leagueName,
+          leagueId,
+          season,
+          swidPrefix: creds.swid ? creds.swid.slice(0, 10) + '...' : '(empty)',
+          espnS2Prefix: creds.espnS2 ? creds.espnS2.slice(0, 10) + '...' : '(empty)',
+          credSource: creds.swid === (process.env.ESPN_SWID || '') ? 'env' : 'db',
+          userId: ctx.user?.id ?? null,
+          error,
+        };
+      }),
   }),
 
   playerProfiles: publicProcedure.query(async () => {
