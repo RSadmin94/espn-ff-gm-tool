@@ -2157,6 +2157,101 @@ export const appRouter = router({
         })(),
       };
     }),
+
+    // ─── saveCredentials — called by Chrome extension to securely store ESPN cookies ───
+    saveCredentials: publicProcedure
+      .input(z.object({
+        swid: z.string().min(1, "SWID is required"),
+        espnS2: z.string().min(1, "espn_s2 is required"),
+        leagueId: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { swid, espnS2, leagueId } = input;
+
+        // Validate credentials against ESPN API before saving
+        const testLeagueId = leagueId || process.env.ESPN_LEAGUE_ID || "";
+        if (testLeagueId) {
+          try {
+            const testUrl = `https://fantasy.espn.com/apis/v3/games/ffl/seasons/2025/segments/0/leagues/${testLeagueId}?view=mSettings`;
+            const testRes = await fetch(testUrl, {
+              headers: { Cookie: `SWID=${swid}; espn_s2=${espnS2}` },
+              signal: AbortSignal.timeout(8000),
+            });
+            if (testRes.status === 401) {
+              throw new Error("ESPN credentials are invalid or expired. Please log into ESPN and try again.");
+            }
+          } catch (err) {
+            if (err instanceof Error && err.message.includes("expired")) throw err;
+            // Network errors are non-fatal — still save the credentials
+          }
+        }
+
+        // If user is authenticated, save to their league_connections
+        if (ctx.user) {
+          const db = await getDb();
+          if (db) {
+            const { encryptCredentialsForDb } = await import('./_core/crypto');
+            const encryptedCreds = encryptCredentialsForDb({ leagueId: testLeagueId, swid, espnS2 });
+
+            // Fetch league name from ESPN
+            let leagueName = testLeagueId ? `ESPN League ${testLeagueId}` : "ESPN League";
+            try {
+              const settingsUrl = `https://fantasy.espn.com/apis/v3/games/ffl/seasons/2025/segments/0/leagues/${testLeagueId}?view=mSettings`;
+              const settingsRes = await fetch(settingsUrl, {
+                headers: { Cookie: `SWID=${swid}; espn_s2=${espnS2}` },
+                signal: AbortSignal.timeout(8000),
+              });
+              if (settingsRes.ok) {
+                const data = await settingsRes.json() as Record<string, unknown>;
+                const settings = (data.settings as Record<string, unknown>) || {};
+                if (settings.name) leagueName = String(settings.name);
+              }
+            } catch { /* non-fatal */ }
+
+            await db.insert(lcTable)
+              .values({
+                userId: ctx.user.id,
+                provider: "espn",
+                leagueId: testLeagueId || "default",
+                leagueName,
+                season: 2025,
+                isActive: true,
+                credentials: encryptedCreds,
+                syncStatus: "ok",
+              })
+              .onDuplicateKeyUpdate({
+                set: {
+                  leagueName,
+                  isActive: true,
+                  credentials: encryptedCreds,
+                  syncStatus: "ok",
+                  syncError: null,
+                  updatedAt: new Date(),
+                },
+              });
+
+            // Invalidate active league cache
+            const usersTable = (await import("../drizzle/schema")).users;
+            const [userRow] = await db.select({ activeLeagueId: usersTable.activeLeagueId })
+              .from(usersTable)
+              .where(eqDrizzle(usersTable.id, ctx.user.id))
+              .limit(1);
+            if (!userRow?.activeLeagueId) {
+              const [newConn] = await db.select({ id: lcTable.id })
+                .from(lcTable)
+                .where(andDrizzle(eqDrizzle(lcTable.userId, ctx.user.id), eqDrizzle(lcTable.provider, "espn")))
+                .limit(1);
+              if (newConn) {
+                await db.update(usersTable)
+                  .set({ activeLeagueId: newConn.id })
+                  .where(eqDrizzle(usersTable.id, ctx.user.id));
+              }
+            }
+          }
+        }
+
+        return { success: true, leagueId: testLeagueId };
+      }),
   }),
 
   playerProfiles: publicProcedure.query(async () => {
