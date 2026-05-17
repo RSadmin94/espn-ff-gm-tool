@@ -176,8 +176,7 @@ export default function LeagueConnect() {
       setStep("yahoo_pick_league");
     },
   });
-  // Detect Yahoo OAuth callback (yahoo_auth=success in URL)
-  // Also detect ESPN credential auto-fill from Chrome extension (?provider=espn&leagueId=...&swid=...&s2=...)
+  // Detect Yahoo OAuth callback and ESPN credential auto-fill from Chrome extension
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("yahoo_auth") === "success") {
@@ -188,7 +187,6 @@ export default function LeagueConnect() {
       setError(`Yahoo authorization failed: ${params.get("yahoo_error")}`);
       window.history.replaceState({}, "", window.location.pathname);
     } else if (params.get("provider") === "espn") {
-      // Extension auto-fill: pre-populate ESPN credential fields and jump to the form
       const lid  = params.get("leagueId") || "";
       const swid = params.get("swid") || "";
       const s2   = params.get("s2") || "";
@@ -198,12 +196,34 @@ export default function LeagueConnect() {
         if (swid) setEspnSwid(swid);
         if (s2)   setEspnS2(s2);
         setStep("enter_credentials");
-        // Auto-trigger preview since all fields are filled by the extension
         if (lid && swid && s2) setEspnPreviewReady(true);
         window.history.replaceState({}, "", window.location.pathname);
+
+        // ✨ Auto-submit if user is already signed in and all credentials present
+        if (lid && swid && s2 && user) {
+          setStep("generating");
+          setProgressStep(0);
+          setProgressPct(0);
+          let autoStep = 0;
+          const autoInterval = setInterval(() => {
+            autoStep++;
+            if (autoStep < DNA_STEPS.length - 1) {
+              setProgressStep(autoStep);
+              setProgressPct(Math.round((autoStep / (DNA_STEPS.length - 1)) * 85));
+            } else {
+              clearInterval(autoInterval);
+            }
+          }, 900);
+          importEspnMutation.mutate({ leagueId: lid, swid, espnS2: s2, season: 2025 });
+        } else if (lid && swid && s2 && !user) {
+          // Not signed in — redirect to login, return here after
+          const returnUrl = `${window.location.pathname}?provider=espn&leagueId=${encodeURIComponent(lid)}&swid=${encodeURIComponent(swid)}&s2=${encodeURIComponent(s2)}`;
+          const loginUrl = getLoginUrl(returnUrl);
+          window.location.href = loginUrl;
+        }
       }
     }
-  }, []);
+  }, [user]);
   const handleYahooConnect = () => {
     if (!user) {
       window.location.href = getLoginUrl();
