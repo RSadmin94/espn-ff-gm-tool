@@ -5,7 +5,6 @@ import { parse as parseCookieHeader } from "cookie";
 import type { Request } from "express";
 import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
-
 import * as db from "../db";
 import { ENV } from "./env";
 import type {
@@ -15,30 +14,6 @@ import type {
   GetUserInfoWithJwtRequest,
   GetUserInfoWithJwtResponse,
 } from "./types/manusTypes";
-const CRON_OPEN_ID_PREFIX = "cron_";
-
-export type AuthenticatedUser = User & {
-  taskUid?: string;
-  isCron?: boolean;
-};
-
-function buildCronUser(userInfo: GetUserInfoWithJwtResponse): AuthenticatedUser {
-  const now = new Date();
-  return {
-    id: -1,
-    openId: userInfo.openId,
-    name: userInfo.name || "Manus Scheduled Task",
-    email: null,
-    loginMethod: null,
-    role: "user",
-    createdAt: now,
-    updatedAt: now,
-    lastSignedIn: now,
-    taskUid: userInfo.taskUid ?? undefined,
-    isCron: true,
-  } as AuthenticatedUser;
-}
-
 // Utility function
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
@@ -291,10 +266,12 @@ class SDKServer {
       throw ForbiddenError("Invalid session cookie");
     }
 
-    // === Cron short-circuit ===
     if (session.openId.startsWith(CRON_OPEN_ID_PREFIX)) {
       const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
-      if (!userInfo.taskUid) throw ForbiddenError("Cron session missing task_uid");
+      const taskUid = userInfo.taskUid ?? null;
+      if (!taskUid) {
+        throw ForbiddenError("Cron session missing task_uid");
+      }
       return buildCronUser(userInfo);
     }
 
@@ -331,6 +308,33 @@ class SDKServer {
 
     return user;
   }
+}
+
+const CRON_OPEN_ID_PREFIX = "cron_";
+
+/** Result of `sdk.authenticateRequest`. Cron callbacks set `isCron=true` and `taskUid`; see `references/periodic-updates.md`. */
+export type AuthenticatedUser = User & {
+  taskUid?: string;
+  isCron?: boolean;
+};
+
+function buildCronUser(
+  userInfo: GetUserInfoWithJwtResponse
+): AuthenticatedUser {
+  const now = new Date();
+  return {
+    id: -1,
+    openId: userInfo.openId,
+    name: userInfo.name || "Manus Scheduled Task",
+    email: null,
+    loginMethod: null,
+    role: "user",
+    createdAt: now,
+    updatedAt: now,
+    lastSignedIn: now,
+    taskUid: userInfo.taskUid ?? undefined,
+    isCron: true,
+  } as AuthenticatedUser;
 }
 
 export const sdk = new SDKServer();
