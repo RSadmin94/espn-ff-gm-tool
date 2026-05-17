@@ -141,18 +141,12 @@ export function registerOAuthRoutes(app: Express) {
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-      // Check if state contains a returnPath (e.g. from extension connect flow)
-      let redirectTo = "/";
-      try {
-        const decoded = JSON.parse(Buffer.from(state, "base64").toString());
-        if (decoded.returnPath) {
-          redirectTo = decoded.returnPath;
-        }
-      } catch {
-        // state is plain base64 redirectUri — use default redirect
-      }
+      // Check for a returnPath cookie set before login redirect
+      const returnPath = req.cookies?.["espn_return_path"] || "/";
+      // Clear the return path cookie
+      res.clearCookie("espn_return_path");
 
-      res.redirect(302, redirectTo);
+      res.redirect(302, returnPath);
     } catch (error) {
       console.error("[OAuth] Callback failed", error);
       res.status(500).json({ error: "OAuth callback failed" });
