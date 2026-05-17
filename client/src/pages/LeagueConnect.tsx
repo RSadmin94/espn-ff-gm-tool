@@ -594,11 +594,22 @@ export default function LeagueConnect() {
   // ── Step: ESPN enter credentials ─────────────────────────────────────────
   if (step === "enter_credentials" && selectedProvider === "espn") {
     const provider = PROVIDERS.find(p => p.id === "espn")!;
-    const allFilled = !!espnLeagueId.trim() && !!espnSwid.trim() && !!espnS2.trim();
+
+    // Extract league ID from a full ESPN URL or accept a bare ID
+    const extractLeagueId = (input: string): string => {
+      const trimmed = input.trim();
+      // Try to extract from URL: ?leagueId=XXXXX or /league/XXXXX
+      const urlMatch = trimmed.match(/[?&/]leagueId[=/](\d+)/i) || trimmed.match(/(\d{5,})/); 
+      return urlMatch ? urlMatch[1] : trimmed;
+    };
+
+    const [espnUrlInput, setEspnUrlInput] = useState("");
+    const derivedLeagueId = extractLeagueId(espnUrlInput || espnLeagueId);
+
     const handleEspnImport = () => {
-      if (!espnLeagueId.trim()) { setError("League ID is required"); return; }
-      if (!espnSwid.trim()) { setError("SWID cookie is required"); return; }
-      if (!espnS2.trim()) { setError("espn_s2 cookie is required"); return; }
+      const lid = derivedLeagueId;
+      if (!lid) { setError("Please enter your ESPN league URL or ID"); return; }
+      setEspnLeagueId(lid);
       setError(null);
       setStep("generating");
       setProgressStep(0);
@@ -613,10 +624,11 @@ export default function LeagueConnect() {
           clearInterval(espnInterval);
         }
       }, 900);
+      // Pass cookies only if auto-filled by extension; otherwise backend uses env vars
       importEspnMutation.mutate({
-        leagueId: espnLeagueId.trim(),
-        swid: espnSwid.trim(),
-        espnS2: espnS2.trim(),
+        leagueId: lid,
+        swid: espnSwid.trim() || undefined,
+        espnS2: espnS2.trim() || undefined,
         season: 2025,
       });
     };
@@ -661,111 +673,48 @@ export default function LeagueConnect() {
           )}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">{isAddLeagueMode ? "Connect Another ESPN League" : "Connect Your ESPN League"}</CardTitle>
+              <CardTitle className="text-lg">{isAddLeagueMode ? "Add Another ESPN League" : "Connect Your ESPN League"}</CardTitle>
               <CardDescription>
-                {provider.instructions}
+                Paste your ESPN Fantasy Football league URL or just the league ID.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
-              {(espnSwid || espnS2) ? (
+              {(espnSwid || espnS2) && (
                 <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-4 text-sm text-emerald-700 dark:text-emerald-300 flex items-start gap-2">
                   <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                   <div>
-                    <strong>Auto-filled by the DNA Advisor extension.</strong>{" "}
-                    Your SWID and espn_s2 cookies were detected automatically. Verify your League ID below and click Connect.
+                    <strong>Credentials auto-filled by the DNA Advisor extension.</strong>{" "}
+                    Verify your league URL below and click Connect.
                   </div>
-                </div>
-              ) : (
-                <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-4 text-sm text-amber-700 dark:text-amber-300">
-                  <strong>How to find your cookies:</strong> Log into{" "}
-                  <a href="https://fantasy.espn.com" target="_blank" rel="noopener noreferrer" className="underline">
-                    fantasy.espn.com
-                  </a>{" "}
-                  → open DevTools (F12) → Application tab → Cookies →{" "}
-                  <code className="font-mono text-xs bg-black/10 px-1 rounded">fantasy.espn.com</code> → copy{" "}
-                  <code className="font-mono text-xs bg-black/10 px-1 rounded">SWID</code> and{" "}
-                  <code className="font-mono text-xs bg-black/10 px-1 rounded">espn_s2</code>.
                 </div>
               )}
               <div className="space-y-2">
-                <label className="text-sm font-medium">League ID</label>
+                <label className="text-sm font-medium">ESPN League URL or ID</label>
                 <Input
-                  placeholder="e.g. 457622"
-                  value={espnLeagueId}
-                  onChange={e => { setEspnLeagueId(e.target.value); setEspnPreviewReady(false); }}
+                  placeholder="https://fantasy.espn.com/football/league?leagueId=457622"
+                  value={espnUrlInput || espnLeagueId}
+                  onChange={e => {
+                    setEspnUrlInput(e.target.value);
+                    setEspnLeagueId("");
+                    setEspnPreviewReady(false);
+                  }}
                   disabled={importEspnMutation.isPending}
+                  className="text-sm"
                 />
-                <p className="text-xs text-muted-foreground">Found in your ESPN league URL: /football/league?leagueId=<strong>457622</strong></p>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">SWID Cookie</label>
-                <Input
-                  placeholder="{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}"
-                  value={espnSwid}
-                  onChange={e => { setEspnSwid(e.target.value); setEspnPreviewReady(false); }}
-                  disabled={importEspnMutation.isPending}
-                  className="font-mono text-xs"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">espn_s2 Cookie</label>
-                <Input
-                  placeholder="AEBxxxxxxxxxxxxxxxxxxxxxxxx..."
-                  value={espnS2}
-                  onChange={e => { setEspnS2(e.target.value); setEspnPreviewReady(false); }}
-                  onBlur={() => { if (allFilled) setEspnPreviewReady(true); }}
-                  disabled={importEspnMutation.isPending}
-                  className="font-mono text-xs"
-                />
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Lock className="w-3 h-3" />
-                  Credentials are encrypted with AES-256-GCM before storage. Never shared or logged.
+                {derivedLeagueId && (espnUrlInput.length > 10) && (
+                  <p className="text-xs text-emerald-500 flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    League ID detected: <strong>{derivedLeagueId}</strong>
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Paste your full ESPN league URL or just the numeric ID (e.g. <strong>457622</strong>).
                 </p>
               </div>
 
-              {/* League name preview card */}
-              {allFilled && (
-                <div>
-                  {espnPreviewQuery.isFetching && (
-                    <div className="rounded-lg border border-border bg-muted/30 p-4 flex items-center gap-3 text-sm text-muted-foreground">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Verifying league credentials with ESPN…
-                    </div>
-                  )}
-                  {!espnPreviewQuery.isFetching && espnPreviewQuery.data?.valid && (
-                    <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-4 flex items-center gap-3">
-                      <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-                      <div>
-                        <div className="font-semibold text-foreground">{espnPreviewQuery.data.leagueName}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {espnPreviewQuery.data.teamCount} teams · ESPN Fantasy · 2025 season
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {!espnPreviewQuery.isFetching && espnPreviewQuery.data && !espnPreviewQuery.data.valid && (
-                    <Alert variant="destructive">
-                      <AlertDescription>{espnPreviewQuery.data.error || "Could not verify league — check your credentials."}</AlertDescription>
-                    </Alert>
-                  )}
-                  {/* Trigger preview if not yet triggered */}
-                  {!espnPreviewReady && !espnPreviewQuery.isFetching && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => setEspnPreviewReady(true)}
-                    >
-                      <RefreshCw className="w-3.5 h-3.5 mr-2" />
-                      Verify League
-                    </Button>
-                  )}
-                </div>
-              )}
-
               <Button
                 onClick={handleEspnImport}
-                disabled={!espnLeagueId.trim() || !espnSwid.trim() || !espnS2.trim() || importEspnMutation.isPending}
+                disabled={!derivedLeagueId || importEspnMutation.isPending}
                 className="w-full"
               >
                 {importEspnMutation.isPending ? (

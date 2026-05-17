@@ -563,20 +563,21 @@ Teams and activity:\n${teamSummaries}\n\nGenerate the DNA profile.`,
   previewEspnLeague: protectedProcedure
     .input(z.object({
       leagueId: z.string().min(1),
-      swid: z.string().min(1),
-      espnS2: z.string().min(1),
+      swid: z.string().optional(),
+      espnS2: z.string().optional(),
       season: z.number().default(2025),
     }))
     .query(async ({ input }) => {
       try {
+        // Use provided cookies or fall back to server-side env vars
         const creds: EspnCreds = {
           leagueId: input.leagueId,
-          swid: input.swid,
-          espnS2: input.espnS2,
+          swid: input.swid || process.env.ESPN_SWID || "",
+          espnS2: input.espnS2 || process.env.ESPN_S2 || "",
         };
         const result = await fetchEspnViewsHardened(input.season, ["mSettings", "mTeam"], creds);
         if (result.authError) {
-          return { valid: false, error: "ESPN auth failed — check your SWID and espn_s2 cookies." };
+          return { valid: false, error: "ESPN auth failed — league may be private or credentials expired." };
         }
         const rawSettings = normalizeSettings(result.merged);
         const rawTeams = normalizeTeams(result.merged);
@@ -594,18 +595,19 @@ Teams and activity:\n${teamSummaries}\n\nGenerate the DNA profile.`,
   importEspnLeague: protectedProcedure
     .input(z.object({
       leagueId: z.string().min(1, "League ID is required"),
-      swid: z.string().min(1, "SWID cookie is required"),
-      espnS2: z.string().min(1, "espn_s2 cookie is required"),
+      swid: z.string().optional(),
+      espnS2: z.string().optional(),
       season: z.number().default(2025),
     }))
     .mutation(async ({ input, ctx }) => {
       const steps: string[] = [];
-      steps.push("Validating ESPN credentials...");
+      steps.push("Validating ESPN league...");
 
+      // Use provided cookies or fall back to server-side env vars
       const creds: EspnCreds = {
         leagueId: input.leagueId,
-        swid: input.swid,
-        espnS2: input.espnS2,
+        swid: input.swid || process.env.ESPN_SWID || "",
+        espnS2: input.espnS2 || process.env.ESPN_S2 || "",
       };
 
       // Validate by fetching mSettings + mTeam
@@ -615,13 +617,13 @@ Teams and activity:\n${teamSummaries}\n\nGenerate the DNA profile.`,
       } catch (err) {
         throw new Error(
           err instanceof Error
-            ? `ESPN auth failed: ${err.message}`
-            : "ESPN auth failed — check your SWID and espn_s2 cookies."
+            ? `ESPN fetch failed: ${err.message}`
+            : "Could not reach ESPN — league may be private or credentials expired."
         );
       }
 
       if (fetchResult.authError) {
-        throw new Error("ESPN returned an auth error — your SWID or espn_s2 may be expired.");
+        throw new Error("ESPN auth error — this league may be private. The Chrome extension can provide credentials automatically.");
       }
 
       const rawSettings = normalizeSettings(fetchResult.merged);
