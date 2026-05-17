@@ -66,6 +66,9 @@ export interface GetUserInfoWithJwtResponse {
   email?: string | null;
   platform?: string | null;
   loginMethod?: string | null;
-  /** Cron-only; references `schedule_task.uid`. */
+  /**
+   * Cron-only field. Populated by bizserver when `openId` is a cron identity
+   * (i.e. starts with the `cron_` prefix); blank for real users.
+   */
   taskUid?: string | null;
 }
