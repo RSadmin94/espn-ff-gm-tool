@@ -130,6 +130,7 @@ export default function LeagueConnect() {
   const [espnSwid, setEspnSwid] = useState("");
   const [espnS2, setEspnS2] = useState("");
   const [espnPreviewReady, setEspnPreviewReady] = useState(false);
+  const [espnUrlInput, setEspnUrlInput] = useState("");
   // Fetch existing leagues to detect add-league vs first-time mode
   const myLeaguesQuery = trpc.league.getMyLeagues.useQuery(undefined, { enabled: !!user });
   const isAddLeagueMode = (myLeaguesQuery.data?.length ?? 0) > 0;
@@ -598,12 +599,10 @@ export default function LeagueConnect() {
     // Extract league ID from a full ESPN URL or accept a bare ID
     const extractLeagueId = (input: string): string => {
       const trimmed = input.trim();
-      // Try to extract from URL: ?leagueId=XXXXX or /league/XXXXX
-      const urlMatch = trimmed.match(/[?&/]leagueId[=/](\d+)/i) || trimmed.match(/(\d{5,})/); 
+      const urlMatch = trimmed.match(/[?&/]leagueId[=/](\d+)/i) || trimmed.match(/(\d{5,})/);
       return urlMatch ? urlMatch[1] : trimmed;
     };
 
-    const [espnUrlInput, setEspnUrlInput] = useState("");
     const derivedLeagueId = extractLeagueId(espnUrlInput || espnLeagueId);
 
     const handleEspnImport = () => {
