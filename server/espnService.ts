@@ -64,6 +64,56 @@ export const PRO_TEAM_MAP: Record<number, string> = {
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * Resolve ESPN credentials for a request:
+ * 1. If explicit creds are passed, use them.
+ * 2. Otherwise query league_connections for the active user's stored credentials.
+ * 3. Fall back to process.env.ESPN_SWID / ESPN_S2.
+ */
+export async function resolveEspnCreds(
+  explicitCreds?: EspnCreds,
+  userId?: number
+): Promise<EspnCreds> {
+  // Explicit creds always win
+  if (explicitCreds?.swid && explicitCreds?.espnS2) return explicitCreds;
+
+  // Try DB credentials for the user
+  if (userId) {
+    try {
+      const { getActiveEspnCredentials } = await import("./db");
+      const dbCreds = await getActiveEspnCredentials(userId);
+      if (dbCreds?.swid && dbCreds?.espnS2) return dbCreds;
+    } catch { /* non-fatal — fall through to env */ }
+  }
+
+  // Fall back to env vars
+  return {
+    leagueId: LEAGUE_ID,
+    swid: SWID,
+    espnS2: ESPN_S2,
+  };
+}
+
+/**
+ * Mark a user's league credentials as expired in the DB after a 401.
+ */
+async function markCredsExpired(userId: number): Promise<void> {
+  try {
+    const { getDb } = await import("./db");
+    const { leagueConnections } = await import("../drizzle/schema");
+    const { eq, and } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    await db.update(leagueConnections)
+      .set({ syncStatus: "error", syncError: "ESPN credentials expired (401)", updatedAt: new Date() })
+      .where(and(
+        eq(leagueConnections.userId, userId),
+        eq(leagueConnections.provider, "espn"),
+        eq(leagueConnections.isActive, true)
+      ));
+  } catch { /* non-fatal */ }
+}
+
 function buildCookieStringFor(creds?: EspnCreds): string {
   const swid = creds?.swid ?? SWID;
   const s2   = creds?.espnS2 ?? ESPN_S2;
@@ -298,7 +348,8 @@ export function staleSummary(fetchedAt: Date): string {
 export async function fetchEspnViewsHardened(
   season: number,
   views: string[] = [...ALL_VIEWS],
-  creds?: EspnCreds
+  creds?: EspnCreds,
+  userId?: number
 ): Promise<PipelineFetchResult> {
   const _espnStartMs = Date.now();
   const cookiesPresent = hasCookies(creds);
@@ -338,6 +389,7 @@ export async function fetchEspnViewsHardened(
 
   // Bulk failed — check if auth error
   if (bulkResult.status === 401 || bulkResult.status === 403) {
+    if (userId) markCredsExpired(userId); // fire-and-forget
     throw new Error(
       `ESPN API returned ${bulkResult.status}. Cookies may be expired. Please update ESPN_SWID and ESPN_S2 in your secrets.`
     );
@@ -360,6 +412,7 @@ export async function fetchEspnViewsHardened(
   );
 
   if (authError) {
+    if (userId) markCredsExpired(userId); // fire-and-forget
     throw new Error(
       `ESPN API authentication failed. Cookies may be expired. Please update ESPN_SWID and ESPN_S2 in your secrets.`
     );
