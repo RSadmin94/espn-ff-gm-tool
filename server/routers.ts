@@ -1026,6 +1026,15 @@ export const appRouter = router({
         } catch (_e) { /* non-fatal — fall back to env-var league */ }
         const activeLeagueId = activeCreds?.leagueId ?? LEAGUE_ID;
 
+        // ─── DIAGNOSTIC LOGGING ───
+        console.log('[ESPN Refresh] Credential resolution:', JSON.stringify({
+          credSource: activeCreds ? 'db' : 'env',
+          leagueId: activeLeagueId,
+          swidPrefix: activeCreds?.swid ? activeCreds.swid.slice(0, 10) + '...' : (process.env.ESPN_SWID ? process.env.ESPN_SWID.slice(0, 10) + '...' : '(empty)'),
+          espnS2Present: !!(activeCreds?.espnS2 || process.env.ESPN_S2),
+          seasonsToRefresh,
+        }));
+
         for (const season of seasonsToRefresh) {
           // Skip closed seasons that are already successfully cached (unless forceRefresh)
           if (!input.forceRefresh && CLOSED_SEASONS.includes(season)) {
