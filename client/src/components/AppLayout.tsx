@@ -141,7 +141,7 @@ const systemGroup = "System";
 
 function DataHealthBanner() {
   const [dismissed, setDismissed] = useState(false);
-  const { data } = trpc.pipeline.health.useQuery({}, { refetchOnWindowFocus: false, staleTime: 5 * 60 * 1000 });
+  const { data } = trpc.pipeline.health.useQuery({}, { refetchOnWindowFocus: false, staleTime: 5 * 60 * 1000, retry: false });
   if (dismissed || !data) return null;
   const { cookiesPresent, overallHealth, staleSeasons, partialSeasons } = data;
   let variant: "red" | "amber" | "yellow" | null = null;

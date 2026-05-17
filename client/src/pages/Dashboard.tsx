@@ -143,7 +143,7 @@ function KeeperCountdownCard() {
 
 // ─── AI Usage Card ──────────────────────────────────────────────────────────
 function AIUsageCard() {
-  const { data, isLoading } = trpc.usage.getMyUsage.useQuery();
+  const { data, isLoading } = trpc.usage.getMyUsage.useQuery(undefined, { retry: false });
   const DAILY_BUDGET = 50_000;
 
   const totalTokens = data?.totalTokens ?? 0;
@@ -225,7 +225,7 @@ function Countdown({ target, label }: { target: Date; label: string }) {
 
 // ─── League Pulse Strip ─────────────────────────────────────────────────────
 function LeaguePulseStrip() {
-  const { data, isLoading } = trpc.weeklyAssessment.leaguePulse.useQuery({ season: 2025 });
+  const { data, isLoading } = trpc.weeklyAssessment.leaguePulse.useQuery({ season: 2025 }, { retry: false });
 
   if (isLoading) {
     return (
@@ -328,12 +328,12 @@ export default function Dashboard() {
   const [, navigate] = useLocation();
   const { isAuthenticated } = useAuth();
 
-  const { data: standings, isLoading: standingsLoading } = trpc.espn.standings.useQuery({ season: 2025 });
-  const { data: manifests } = trpc.espn.manifests.useQuery();
-  const { data: draftOrder2026Raw } = trpc.espn.draftOrder.useQuery({ season: 2026 });
-  const { data: keeperHistoryRaw } = trpc.espn.keeperHistory.useQuery();
-  const { data: leagueDraftData, isLoading: draftTendenciesLoading } = trpc.leagueDraftTendencies.useQuery();
-  const { data: ownerStatsData, isLoading: ownerStatsLoading } = trpc.ownerCareerStats.useQuery();
+  const { data: standings, isLoading: standingsLoading } = trpc.espn.standings.useQuery({ season: 2025 }, { retry: false });
+  const { data: manifests } = trpc.espn.manifests.useQuery(undefined, { retry: false });
+  const { data: draftOrder2026Raw } = trpc.espn.draftOrder.useQuery({ season: 2026 }, { retry: false });
+  const { data: keeperHistoryRaw } = trpc.espn.keeperHistory.useQuery(undefined, { retry: false });
+  const { data: leagueDraftData, isLoading: draftTendenciesLoading } = trpc.leagueDraftTendencies.useQuery(undefined, { retry: false });
+  const { data: ownerStatsData, isLoading: ownerStatsLoading } = trpc.ownerCareerStats.useQuery(undefined, { retry: false });
   const chatMutation = trpc.advisor.chat.useMutation();
 
   type DraftOrderEntry = { position: number; teamId: number; name?: string; owners?: string };

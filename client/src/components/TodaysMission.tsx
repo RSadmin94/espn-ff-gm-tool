@@ -126,11 +126,11 @@ interface TodaysMissionProps {
 export default function TodaysMission({ season = 2026 }: TodaysMissionProps) {
   const pulse = trpc.weeklyAssessment.leaguePulse.useQuery(
     { season },
-    { staleTime: 5 * 60 * 1000, refetchOnWindowFocus: false }
+    { staleTime: 5 * 60 * 1000, refetchOnWindowFocus: false, retry: false }
   );
   const opps = trpc.weeklyAssessment.rodOpportunities.useQuery(
     { season },
-    { staleTime: 10 * 60 * 1000, refetchOnWindowFocus: false }
+    { staleTime: 10 * 60 * 1000, refetchOnWindowFocus: false, retry: false }
   );
 
   const isOffseason = pulse.data?.isSeasonComplete ?? false;
