@@ -2164,12 +2164,17 @@ export const appRouter = router({
         swid: z.string().min(1, "SWID is required"),
         espnS2: z.string().min(1, "espn_s2 is required"),
         // Accept leagueId as string or number (extension may send either)
-        leagueId: z.union([z.string(), z.number()]).optional().transform(v => v ? String(v) : undefined),
+        // Note: transform handles 0 explicitly — Number(0) is falsy but valid
+        leagueId: z.union([z.string(), z.number()]).optional().transform(v => {
+          if (v === undefined || v === null || v === '' || v === 0) return undefined;
+          return String(v);
+        }),
         season: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { swid, espnS2 } = input;
-        const testLeagueId = input.leagueId || process.env.ESPN_LEAGUE_ID || "";
+        // Use provided leagueId if non-empty, otherwise fall back to env var
+        const testLeagueId = (input.leagueId && input.leagueId !== '0') ? input.leagueId : (process.env.ESPN_LEAGUE_ID || "");
         // Try current season first, then fall back to previous
         const currentYear = new Date().getFullYear();
         const seasonsToTry = input.season
