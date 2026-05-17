@@ -2163,26 +2163,43 @@ export const appRouter = router({
       .input(z.object({
         swid: z.string().min(1, "SWID is required"),
         espnS2: z.string().min(1, "espn_s2 is required"),
-        leagueId: z.string().optional(),
+        // Accept leagueId as string or number (extension may send either)
+        leagueId: z.union([z.string(), z.number()]).optional().transform(v => v ? String(v) : undefined),
+        season: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        const { swid, espnS2, leagueId } = input;
+        const { swid, espnS2 } = input;
+        const testLeagueId = input.leagueId || process.env.ESPN_LEAGUE_ID || "";
+        // Try current season first, then fall back to previous
+        const currentYear = new Date().getFullYear();
+        const seasonsToTry = input.season
+          ? [input.season]
+          : [currentYear, currentYear - 1, 2026, 2025];
 
-        // Validate credentials against ESPN API before saving
-        const testLeagueId = leagueId || process.env.ESPN_LEAGUE_ID || "";
+        // Always guarantee a non-empty leagueName
+        let leagueName = testLeagueId ? `ESPN League ${testLeagueId}` : "ESPN League";
+
+        // Try to fetch league name from ESPN (non-blocking — failure just uses fallback)
         if (testLeagueId) {
-          try {
-            const testUrl = `https://fantasy.espn.com/apis/v3/games/ffl/seasons/2025/segments/0/leagues/${testLeagueId}?view=mSettings`;
-            const testRes = await fetch(testUrl, {
-              headers: { Cookie: `SWID=${swid}; espn_s2=${espnS2}` },
-              signal: AbortSignal.timeout(8000),
-            });
-            if (testRes.status === 401) {
-              throw new Error("ESPN credentials are invalid or expired. Please log into ESPN and try again.");
+          for (const season of seasonsToTry) {
+            try {
+              const settingsUrl = `https://fantasy.espn.com/apis/v3/games/ffl/seasons/${season}/segments/0/leagues/${testLeagueId}?view=mSettings`;
+              const settingsRes = await fetch(settingsUrl, {
+                headers: { Cookie: `SWID=${swid}; espn_s2=${espnS2}` },
+                signal: AbortSignal.timeout(8000),
+              });
+              if (settingsRes.status === 401) {
+                throw new Error("ESPN credentials are invalid or expired. Please log into ESPN and try again.");
+              }
+              if (settingsRes.ok) {
+                const data = await settingsRes.json() as Record<string, unknown>;
+                const settings = (data.settings as Record<string, unknown>) || {};
+                if (settings.name) { leagueName = String(settings.name); break; }
+              }
+            } catch (err) {
+              if (err instanceof Error && err.message.includes("expired")) throw err;
+              // Network/404 errors are non-fatal — try next season
             }
-          } catch (err) {
-            if (err instanceof Error && err.message.includes("expired")) throw err;
-            // Network errors are non-fatal — still save the credentials
           }
         }
 
@@ -2192,21 +2209,6 @@ export const appRouter = router({
           if (db) {
             const { encryptCredentialsForDb } = await import('./_core/crypto');
             const encryptedCreds = encryptCredentialsForDb({ leagueId: testLeagueId, swid, espnS2 });
-
-            // Fetch league name from ESPN
-            let leagueName = testLeagueId ? `ESPN League ${testLeagueId}` : "ESPN League";
-            try {
-              const settingsUrl = `https://fantasy.espn.com/apis/v3/games/ffl/seasons/2025/segments/0/leagues/${testLeagueId}?view=mSettings`;
-              const settingsRes = await fetch(settingsUrl, {
-                headers: { Cookie: `SWID=${swid}; espn_s2=${espnS2}` },
-                signal: AbortSignal.timeout(8000),
-              });
-              if (settingsRes.ok) {
-                const data = await settingsRes.json() as Record<string, unknown>;
-                const settings = (data.settings as Record<string, unknown>) || {};
-                if (settings.name) leagueName = String(settings.name);
-              }
-            } catch { /* non-fatal */ }
 
             await db.insert(lcTable)
               .values({
