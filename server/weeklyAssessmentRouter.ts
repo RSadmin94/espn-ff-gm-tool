@@ -112,7 +112,7 @@ export const weeklyAssessmentRouter = router({
     }))
     .query(async ({ input }) => {
       const cached = await getCachedView(input.season, "combined");
-      if (!cached) throw new TRPCError({ code: "NOT_FOUND", message: "No data for this season." });
+      if (!cached) return null;
 
       const data = cached.payload as Record<string, unknown>;
       const teams = normalizeTeams(data);
@@ -216,13 +216,18 @@ export const weeklyAssessmentRouter = router({
       }
       // Cache miss — run the full assessment and populate the shared cache so
       // subsequent calls to fullReport or rodOpportunities are both served instantly.
-      const full = await buildWeeklyAssessment(input.season);
-      reportCache.set(cacheKey, { report: full, cachedAt: Date.now() });
-      return {
-        week: full.week,
-        opportunities: full.topOpportunities,
-        summary: full.leagueSummary,
-      };
+      try {
+        const full = await buildWeeklyAssessment(input.season);
+        reportCache.set(cacheKey, { report: full, cachedAt: Date.now() });
+        return {
+          week: full.week,
+          opportunities: full.topOpportunities,
+          summary: full.leagueSummary,
+        };
+      } catch {
+        // No ESPN data cached yet — return empty state instead of throwing
+        return { week: 0, opportunities: [], summary: "" };
+      }
     }),
 
   /**
@@ -235,7 +240,7 @@ export const weeklyAssessmentRouter = router({
     .query(({ input }) => {
       return memCache(`leaguePulse:${input.season}`, 5 * 60_000, async () => {
       const cached = await getCachedView(input.season, "combined");
-      if (!cached) throw new TRPCError({ code: "NOT_FOUND", message: "No data." });
+      if (!cached) return null;
 
       const data = cached.payload as Record<string, unknown>;
       const teams = normalizeTeams(data);
@@ -353,7 +358,7 @@ export const weeklyAssessmentRouter = router({
 
       // Get team list from cached data
       const cached = await getCachedView(input.season, "combined");
-      if (!cached) throw new TRPCError({ code: "NOT_FOUND", message: "No ESPN data cached for this season. Run a data refresh first." });
+      if (!cached) return null;
 
       const data = cached.payload as Record<string, unknown>;
       const teams = normalizeTeams(data);

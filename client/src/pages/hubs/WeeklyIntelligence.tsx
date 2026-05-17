@@ -873,6 +873,7 @@ export default function WeeklyIntelligence() {
 
   const batchRunMutation = trpc.weeklyAssessment.batchRunAssessment.useMutation({
     onSuccess: (result) => {
+      if (!result) return;
       setBatchJobId(result.jobId);
       setShowBatchPanel(true);
       toast.info(`Batch started — assessing ${result.teamCount} teams…`);

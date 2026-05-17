@@ -107,7 +107,19 @@ export default function LeagueSwitcher() {
   // ─── Unauthenticated state ────────────────────────────────────────────────
   if (!user) {
     return (
-      <div className="px-4 py-3 border-t border-border">
+      <div className="px-4 py-3 border-t border-border space-y-2">
+        {/* League switcher placeholder — visible even when signed out */}
+        <button
+          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-accent/40 hover:bg-accent/70 transition-colors text-left"
+          onClick={() => (window.location.href = getLoginUrl())}
+        >
+          <span className="text-sm flex-shrink-0">🏆</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-medium text-foreground/60 truncate leading-tight">Select League</p>
+            <p className="text-[9px] text-muted-foreground/50 leading-tight">Sign in to switch leagues</p>
+          </div>
+          <ChevronDown className="w-3 h-3 text-muted-foreground/30 flex-shrink-0" />
+        </button>
         <Button
           variant="outline"
           size="sm"
@@ -117,9 +129,6 @@ export default function LeagueSwitcher() {
           <LogIn className="w-3.5 h-3.5" />
           Sign In
         </Button>
-        <p className="text-[10px] text-muted-foreground/50 text-center mt-1.5">
-          Sign in to save leagues &amp; history
-        </p>
       </div>
     );
   }
