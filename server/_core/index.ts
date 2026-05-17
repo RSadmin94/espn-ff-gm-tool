@@ -8,6 +8,10 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { espnRefreshHandler } from "../scheduledRefresh";
+import { weeklyIntelHandler } from "../weeklyIntelHandler";
+import { registerAdvisorStreamRoute } from "../advisorStreamHandler";
+import { registerStripeWebhook } from "../stripeWebhook";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -31,6 +35,10 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
+  // Stripe webhook MUST be registered before express.json() to preserve raw body for signature verification
+  registerStripeWebhook(app);
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -44,6 +52,12 @@ async function startServer() {
       createContext,
     })
   );
+  // Streaming advisor SSE endpoint — must be before Vite/static fallthrough
+  registerAdvisorStreamRoute(app);
+  // Scheduled job handlers — must be before Vite/static fallthrough
+  app.post("/api/scheduled/espn-refresh", espnRefreshHandler);
+  app.post("/api/scheduled/weekly-intel", weeklyIntelHandler);
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
