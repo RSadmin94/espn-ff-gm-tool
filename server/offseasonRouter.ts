@@ -15,7 +15,7 @@ import { invokeLLM } from "./_core/llm";
 import { buildKeeperRecommendations } from "./keeperRecommendationEngine";
 import { buildLeagueDraftBoard } from "./draftStrategyEngine";
 import { getCachedView, getAllCachedSeasons, getCompletedSeasonForOffseason, upsertCachedView, upsertRefreshManifest, upsertViewHealth } from "./db";
-import { normalizeDraftPicks, fetchEspnViewsHardened, normalizeTeams, normalizeRosters, normalizeMatchups, normalizeTransactions, validateDataQuality } from "./espnService";
+import { normalizeDraftPicks, fetchEspnViewsHardened, normalizeTeams, normalizeRosters, normalizeMatchups, normalizeTransactions, validateDataQuality, resolveEspnCreds } from "./espnService";
 import { getOrFetchLeagueIdentity, upsertLeagueIdentity } from "./leagueIdentityService";
 import { memCache } from "./memCache";
 
@@ -387,10 +387,11 @@ Be specific, use the actual player names and round numbers. Write in a direct GM
     const planningYear = completedSeason ? completedSeason + 1 : new Date().getFullYear();
     const seasonsToRefresh = completedSeason ? [completedSeason, planningYear] : [planningYear];
     const results: Record<number, { status: string; error?: string; skipped?: boolean }> = {};
+    const creds = await resolveEspnCreds();
 
     for (const season of seasonsToRefresh) {
       try {
-        const pipelineResult = await fetchEspnViewsHardened(season);
+        const pipelineResult = await fetchEspnViewsHardened(season, undefined, creds);
         const data = pipelineResult.merged;
 
         // Persist per-view health
@@ -402,7 +403,7 @@ Be specific, use the actual player names and round numbers. Write in a direct GM
           });
         }
 
-        await upsertCachedView(season, "combined", data);
+        await upsertCachedView(season, "combined", data, creds.leagueId);
 
         // Update league identity (team names, draft order, settings)
         try { await upsertLeagueIdentity(season, data); } catch (_e) { /* non-fatal */ }
