@@ -72,19 +72,23 @@ export const PRO_TEAM_MAP: Record<number, string> = {
  */
 export async function resolveEspnCreds(
   explicitCreds?: EspnCreds,
-  userId?: number
+  userId?: number,
+  leagueId?: string
 ): Promise<EspnCreds> {
   // Explicit creds always win
   if (explicitCreds?.swid && explicitCreds?.espnS2) return explicitCreds;
 
-  // Try DB credentials for the user
-  if (userId) {
-    try {
-      const { getActiveEspnCredentials } = await import("./db");
+  // Try DB credentials first. User-scoped creds win when a user context exists;
+  // cron/public refreshes fall back to the active ESPN connection.
+  try {
+    const { getActiveEspnCredentials, getAnyActiveEspnCredentials } = await import("./db");
+    if (userId) {
       const dbCreds = await getActiveEspnCredentials(userId);
       if (dbCreds?.swid && dbCreds?.espnS2) return dbCreds;
-    } catch { /* non-fatal — fall through to env */ }
-  }
+    }
+    const activeCreds = await getAnyActiveEspnCredentials(leagueId);
+    if (activeCreds?.swid && activeCreds?.espnS2) return activeCreds;
+  } catch { /* non-fatal — fall through to env */ }
 
   // Fall back to env vars
   return {

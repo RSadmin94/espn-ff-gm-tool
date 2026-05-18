@@ -8,7 +8,8 @@
  *   const plain = decryptCredentials(cipher);
  *   // plain is the original object, or null on failure
  *
- * Key: CREDENTIAL_ENCRYPTION_KEY env var — 32-byte hex string (64 hex chars).
+ * Key: ESPN_CRED_ENCRYPTION_KEY or CREDENTIAL_ENCRYPTION_KEY env var —
+ * 32-byte hex string (64 hex chars).
  * Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
  *
  * If the key is missing the helpers fall back to base64 encoding so the app
@@ -22,11 +23,11 @@ const IV_LEN = 12;  // 96-bit IV recommended for GCM
 const TAG_LEN = 16; // 128-bit auth tag
 
 function getKey(): Buffer | null {
-  const raw = process.env.CREDENTIAL_ENCRYPTION_KEY;
+  const raw = process.env.ESPN_CRED_ENCRYPTION_KEY || process.env.CREDENTIAL_ENCRYPTION_KEY;
   if (!raw) return null;
   const buf = Buffer.from(raw, "hex");
   if (buf.length !== 32) {
-    console.warn("[crypto] CREDENTIAL_ENCRYPTION_KEY must be 32 bytes (64 hex chars). Falling back to base64.");
+    console.warn("[crypto] ESPN_CRED_ENCRYPTION_KEY/CREDENTIAL_ENCRYPTION_KEY must be 32 bytes (64 hex chars). Falling back to base64.");
     return null;
   }
   return buf;
@@ -42,7 +43,7 @@ export function encryptCredentials(obj: Record<string, unknown>): string {
   const json = JSON.stringify(obj);
 
   if (!key) {
-    console.warn("[crypto] No CREDENTIAL_ENCRYPTION_KEY — storing credentials as base64 (not encrypted). Set the key in production.");
+    console.warn("[crypto] No ESPN_CRED_ENCRYPTION_KEY/CREDENTIAL_ENCRYPTION_KEY — storing credentials as base64 (not encrypted). Set the key in production.");
     return "b64:" + Buffer.from(json).toString("base64");
   }
 
@@ -70,7 +71,7 @@ export function decryptCredentials(cipher: string): Record<string, unknown> | nu
     if (cipher.startsWith("enc:v1:")) {
       const key = getKey();
       if (!key) {
-        console.warn("[crypto] Cannot decrypt enc:v1 credential — CREDENTIAL_ENCRYPTION_KEY is missing.");
+        console.warn("[crypto] Cannot decrypt enc:v1 credential — ESPN_CRED_ENCRYPTION_KEY/CREDENTIAL_ENCRYPTION_KEY is missing.");
         return null;
       }
       const parts = cipher.split(":");

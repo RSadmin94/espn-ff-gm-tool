@@ -21,6 +21,7 @@ import type { Request, Response } from "express";
 import { sdk } from "./_core/sdk";
 import {
   fetchEspnViewsHardened,
+  resolveEspnCreds,
   normalizeTeams,
   normalizeRosters,
   normalizeMatchups,
@@ -53,7 +54,8 @@ export async function weeklyIntelHandler(req: Request, res: Response) {
     taskUid = user.taskUid;
 
     // ── 1. Fetch ESPN data for the current season ──────────────────────────
-    const pipelineResult = await fetchEspnViewsHardened(CURRENT_SEASON);
+    const creds = await resolveEspnCreds();
+    const pipelineResult = await fetchEspnViewsHardened(CURRENT_SEASON, undefined, creds);
     const data = pipelineResult.merged;
 
     // ── 2. Persist per-view health records ────────────────────────────────
@@ -66,7 +68,7 @@ export async function weeklyIntelHandler(req: Request, res: Response) {
     }
 
     // ── 3. Persist combined cache + league identity ────────────────────────
-    await upsertCachedView(CURRENT_SEASON, "combined", data);
+    await upsertCachedView(CURRENT_SEASON, "combined", data, creds.leagueId);
     try { await upsertLeagueIdentity(CURRENT_SEASON, data); } catch (_e) { /* non-fatal */ }
 
     // ── 4. Normalize and compute quality ──────────────────────────────────

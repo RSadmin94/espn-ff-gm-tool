@@ -49,6 +49,7 @@ import {
   isStale,
   staleSummary,
   hasCookies,
+  resolveEspnCreds,
 } from "./espnService";
 import {
   calcVORP,
@@ -77,6 +78,7 @@ import {
   upsertUserMemory,
   getActiveLeagueForUser,
   setActiveLeagueForUser,
+  getDefaultEspnLeagueId,
   persistLlmUsage,
   getLlmUsageSummary,
 } from "./db";
@@ -85,7 +87,7 @@ const LEAGUE_ID = process.env.ESPN_LEAGUE_ID || "457622";
 const ALL_SEASONS = [2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025,2026];
 
 async function getSeasonData(season: number, leagueId?: string) {
-  const lid = leagueId ?? process.env.ESPN_LEAGUE_ID ?? "default";
+  const lid = leagueId ?? await getDefaultEspnLeagueId();
   return memCache(`seasonData:${lid}:${season}`, 10 * 60_000, async () => {
     const cached = await getCachedView(season, "combined", lid);
     return cached ? (cached.payload as Record<string, unknown>) : null;
@@ -999,36 +1001,12 @@ export const appRouter = router({
         const seasonsToRefresh = input.seasons ?? (input.season ? [input.season] : [ALL_SEASONS[ALL_SEASONS.length - 1]]);
         const results: Record<number, { status: string; error?: string; viewHealth?: Record<string, string>; qualityWarnings?: string[]; skipped?: boolean }> = {};
 
-        // Resolve active league credentials for multi-league isolation.
-        // For public procedures (no ctx.user), we read the first active ESPN connection.
-        let activeCreds: import('./espnService').EspnCreds | undefined;
-        try {
-          const db = await getDb();
-          if (db) {
-            const activeRows = await db
-              .select()
-              .from(lcTable)
-              .where(andDrizzle(eqDrizzle(lcTable.isActive, true), eqDrizzle(lcTable.provider, 'espn')))
-              .orderBy(descDrizzle(lcTable.updatedAt))
-              .limit(1);
-            if (activeRows[0]) {
-              const { decryptCredentialsFromDb } = await import('./_core/crypto');
-              const rawCreds = decryptCredentialsFromDb(activeRows[0].credentials) as Record<string, string> | null;
-              if (rawCreds?.swid && rawCreds?.espnS2) {
-                activeCreds = {
-                  leagueId: (rawCreds.leagueId as string) ?? activeRows[0].leagueId,
-                  swid: rawCreds.swid,
-                  espnS2: rawCreds.espnS2,
-                };
-              }
-            }
-          }
-        } catch (_e) { /* non-fatal — fall back to env-var league */ }
-        const activeLeagueId = activeCreds?.leagueId ?? LEAGUE_ID;
+        const activeCreds = await resolveEspnCreds();
+        const activeLeagueId = activeCreds.leagueId || LEAGUE_ID;
 
         // ─── DIAGNOSTIC LOGGING ───
         console.log('[ESPN Refresh] Credential resolution:', JSON.stringify({
-          credSource: activeCreds ? 'db' : 'env',
+          credSource: activeCreds.swid && activeCreds.swid !== (process.env.ESPN_SWID || '') ? 'db' : 'env',
           leagueId: activeLeagueId,
           swidPrefix: activeCreds?.swid ? activeCreds.swid.slice(0, 10) + '...' : (process.env.ESPN_SWID ? process.env.ESPN_SWID.slice(0, 10) + '...' : '(empty)'),
           espnS2Present: !!(activeCreds?.espnS2 || process.env.ESPN_S2),
@@ -1066,11 +1044,11 @@ export const appRouter = router({
             //    as messageTypeId 246 topics, which we reconstruct into synthetic TRADE_PROPOSAL rows)
             let enrichedData = data;
             try {
-              const proposals = await fetchTradeProposals(season);
+              const proposals = await fetchTradeProposals(season, activeCreds);
               enrichedData = mergeTradeProposalsIntoTransactions(data, proposals);
             } catch (_e) { /* non-fatal — fall back to unmerged data */ }
             try {
-              const activityTrades = await fetchRecentActivityTrades(season, enrichedData);
+              const activityTrades = await fetchRecentActivityTrades(season, enrichedData, activeCreds);
               if (activityTrades.length > 0) {
                 enrichedData = mergeTradeProposalsIntoTransactions(enrichedData, activityTrades);
               }
@@ -1127,9 +1105,9 @@ export const appRouter = router({
           const { refreshTradeNarratives } = await import("./tradeNarrativeService");
           // Build lightweight NarrativeTradeInput list from all cached seasons
           const narrativeInputs: import("./tradeNarrativeService").NarrativeTradeInput[] = [];
-          for (const season of await getAllCachedSeasons()) {
+          for (const season of await getAllCachedSeasons(activeLeagueId)) {
             try {
-              const raw = await getCachedView(season, "combined");
+              const raw = await getCachedView(season, "combined", activeLeagueId);
               if (!raw) continue;
               const payload = raw.payload as Record<string, unknown>;
               const teams = normalizeTeams(payload);
@@ -1188,7 +1166,7 @@ export const appRouter = router({
       }),
 
     manifests: publicProcedure.query(async () => getRefreshManifests()),
-    cachedSeasons: publicProcedure.query(async () => getAllCachedSeasons()),
+    cachedSeasons: publicProcedure.query(async () => getAllCachedSeasons(await getDefaultEspnLeagueId())),
     allSeasons: publicProcedure.query(() => ALL_SEASONS),
 
     settings: publicProcedure

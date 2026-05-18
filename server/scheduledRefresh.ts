@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { sdk } from "./_core/sdk";
-import { fetchEspnViewsHardened, fetchTradeProposals, mergeTradeProposalsIntoTransactions } from "./espnService";
+import { fetchEspnViewsHardened, fetchTradeProposals, mergeTradeProposalsIntoTransactions, resolveEspnCreds } from "./espnService";
 import {
   upsertViewHealth,
   upsertCachedView,
@@ -34,6 +34,7 @@ export async function espnRefreshHandler(req: Request, res: Response) {
     }
 
     const taskUid = user.taskUid;
+    const creds = await resolveEspnCreds();
     const results: Record<number, {
       status: string;
       viewHealth?: Record<string, string>;
@@ -43,7 +44,7 @@ export async function espnRefreshHandler(req: Request, res: Response) {
 
     for (const season of AUTO_REFRESH_SEASONS) {
       try {
-        const pipelineResult = await fetchEspnViewsHardened(season);
+        const pipelineResult = await fetchEspnViewsHardened(season, undefined, creds);
         const data = pipelineResult.merged;
 
         // Persist per-view health records
@@ -60,11 +61,11 @@ export async function espnRefreshHandler(req: Request, res: Response) {
         // trades accepted before the cache window are missing (2026 root cause).
         let enrichedData = data;
         try {
-          const proposals = await fetchTradeProposals(season);
+          const proposals = await fetchTradeProposals(season, creds);
           enrichedData = mergeTradeProposalsIntoTransactions(data, proposals);
         } catch (_e) { /* non-fatal — fall back to unmerged data */ }
 
-        await upsertCachedView(season, "combined", enrichedData);
+        await upsertCachedView(season, "combined", enrichedData, creds.leagueId);
         // Persist static identity data (team names, draft order, settings) to league_identity table
         try { await upsertLeagueIdentity(season, enrichedData); } catch (_e) { /* non-fatal */ }
 
