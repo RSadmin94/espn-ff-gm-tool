@@ -45,6 +45,8 @@ export interface DraftPickRecord {
   roundId: number;
   position: string;
   keeper: boolean;
+  playerId?: number;
+  playerName?: string;
 }
 
 export interface ManagerRawData {
@@ -84,6 +86,12 @@ export interface DraftDNA {
   reachPositions: string[];
   /** Positions they historically find value at (drafts 1.5+ rounds late) */
   valuePositions: string[];
+  /** Repeatedly drafted players, with counts */
+  favoritePlayers: string[];
+  /** Round-by-round plain-English tendency summary */
+  roundStrategy: string;
+  /** How their draft style has changed across eras */
+  draftEvolution: string;
 }
 
 export interface TradeDNA {
@@ -205,6 +213,43 @@ function calcDraftDNA(
   else if (teAvg <= 4) draftStyleBadge = "TE Premium";
   else if (reachPositions.length >= 2) draftStyleBadge = "Positional Reach Tendencies";
   else if (valuePositions.length >= 2) draftStyleBadge = "Value Hunter";
+  const favoritePlayers = Object.entries(
+    picks
+      .filter(p => p.playerName)
+      .reduce<Record<string, number>>((acc, p) => {
+        const name = p.playerName!;
+        acc[name] = (acc[name] || 0) + 1;
+        return acc;
+      }, {})
+  )
+    .filter(([, count]) => count > 1)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, count]) => `${name} (${count}x)`);
+  const summarizeRounds = (start: number, end: number) => {
+    const counts: Record<string, number> = {};
+    for (const pick of nonKeeperPicks) {
+      if (pick.roundId < start || pick.roundId > end) continue;
+      counts[pick.position] = (counts[pick.position] || 0) + 1;
+    }
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([pos, count]) => `${pos} ${count}x`)
+      .join(", ") || "no sample";
+  };
+  const roundStrategy = `R1-3: ${summarizeRounds(1, 3)}; R4-6: ${summarizeRounds(4, 6)}; R7+: ${summarizeRounds(7, 20)}`;
+  const seasons = picks.map(p => p.season).filter(Boolean);
+  const latestSeason = seasons.length ? Math.max(...seasons) : 0;
+  const recent = latestSeason ? nonKeeperPicks.filter(p => p.season >= latestSeason - 2) : [];
+  const older = latestSeason ? nonKeeperPicks.filter(p => p.season < latestSeason - 2) : [];
+  const topPos = (sample: DraftPickRecord[]) => Object.entries(sample.reduce<Record<string, number>>((acc, p) => {
+    acc[p.position] = (acc[p.position] || 0) + 1;
+    return acc;
+  }, {})).sort((a, b) => b[1] - a[1])[0]?.[0] || "balanced";
+  const draftEvolution = recent.length && older.length
+    ? `Earlier years leaned ${topPos(older)}; recent seasons lean ${topPos(recent)}.`
+    : "Not enough season spread to identify evolution.";
 
   return {
     avgRoundByPosition,
@@ -214,6 +259,9 @@ function calcDraftDNA(
     draftStyleBadge,
     reachPositions,
     valuePositions,
+    favoritePlayers,
+    roundStrategy,
+    draftEvolution,
   };
 }
 
@@ -445,6 +493,7 @@ export function calcManagerDNA(
   const dnaSummary = [
     `${manager.ownerName} — ${gmArchetype} | ${manager.seasonRecords.length} seasons analyzed`,
     `Draft: ${draft.draftStyleBadge}${biasLines.length > 0 ? ` (${biasLines.join(", ")})` : ""}`,
+    `Draft history: ${draft.roundStrategy}${draft.favoritePlayers.length ? ` | Repeat targets: ${draft.favoritePlayers.join(", ")}` : ""} | ${draft.draftEvolution}`,
     `Trades: ${trade.avgTradesPerSeason}/season | Loss-trade ratio: ${trade.lossTradeRatio.toFixed(2)}x${tilt.tiltLabel !== "Ice Cold" ? ` | Tilt: ${tilt.tiltLabel}` : ""}`,
     `Waiver: ${waiver.avgAcquisitionsPerSeason}/season | Aggression: ${waiver.waiverAggression}/100`,
     `H2H vs Rod: ${trade.h2hVsRod.wins}W-${trade.h2hVsRod.losses}L`,

@@ -3230,6 +3230,7 @@ Respond with JSON in this exact format:
       1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "D/ST", 17: "D/ST",
     };
     const cachedSeasons = (await getAllCachedSeasons()).sort((a, b) => a - b);
+    const seasonsWithDrafts: number[] = [];
 
     // owner key -> stats
     const ownerMap = new Map<string, {
@@ -3281,8 +3282,8 @@ Respond with JSON in this exact format:
       }
 
       // Process draft picks
-      const draft = (data.draftDetail as Record<string, unknown>) || {};
-      const picks = (draft.picks as Record<string, unknown>[]) || [];
+      const picks = normalizeDraftPicks(data) as Record<string, unknown>[];
+      if (picks.length > 0) seasonsWithDrafts.push(season);
       for (const pick of picks) {
         const overall = pick.overallPickNumber as number;
         const pickKey = `${season}:${overall}`;
@@ -3295,14 +3296,10 @@ Respond with JSON in this exact format:
         const round = (pick.roundId as number) || Math.ceil(overall / 14) || 1;
         const isKeeper = pick.keeper === true || pick.reservedForKeeper === true;
 
-        // Get player name and position
-        const pEntry = (pick.playerPoolEntry as Record<string, unknown>) || {};
-        const pPlayer = (pEntry.player as Record<string, unknown>) || {};
         const playerId = pick.playerId as number;
         const playerInfo = playerInfoMap.get(playerId);
-        const playerName = (pPlayer.fullName as string) || playerInfo?.name || `Player#${playerId}`;
-        const posId = pPlayer.defaultPositionId as number || 0;
-        const position = POS_MAP[posId] || playerInfo?.position || "UNK";
+        const playerName = (pick.playerName as string) || playerInfo?.name || `Player#${playerId}`;
+        const position = (pick.position as string) || playerInfo?.position || "UNK";
 
         if (!ownerMap.has(ownerId)) {
           ownerMap.set(ownerId, {
@@ -3456,7 +3453,7 @@ Respond with JSON in this exact format:
       }
     }
 
-     return { owners, leagueByRound, seasons: cachedSeasons };
+     return { owners, leagueByRound, seasons: seasonsWithDrafts.length ? seasonsWithDrafts : cachedSeasons };
     }); // end memCache
   }),
   // ── Pick Value Calculator ─────────────────────────────────────────────────
@@ -5580,6 +5577,7 @@ if (pickOrder.length > 0) {
               position: (p.position as string) || "?",
               keeper: (p.keeper as boolean) || false,
               playerId: (p.playerId as number) || undefined,
+              playerName: (p.playerName as string) || undefined,
             });
           }
         }

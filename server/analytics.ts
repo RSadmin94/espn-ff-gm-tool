@@ -67,6 +67,7 @@ export interface DraftPickRow {
   position: string;
   keeper: boolean;
   playerId?: number;   // ESPN player ID — used for keeper efficiency cross-reference
+  playerName?: string;
 }
 
 // ─── Replacement level baselines (PPR, 14-team, 1 QB, 2 RB, 2 WR, 1 TE, 1 FLEX) ──
@@ -373,6 +374,9 @@ export interface ManagerBehaviorStats {
   avgDraftRoundByPosition: Record<string, number>;
   earlyQbTendency: boolean;        // drafts QB in rounds 1-3
   earlyTeTendency: boolean;        // drafts TE in rounds 1-4
+  favoriteDraftPositions: string[];
+  repeatedDraftPlayers: string[];
+  draftBehaviorSummary: string;
   // Keeper behavior
   keeperEfficiencyAvg: number;     // avg pick savings on keepers: costOverallPick - adpOverallPick (positive = good value)
   // Derived archetypes
@@ -433,6 +437,45 @@ export function calcManagerBehavior(
 
     const earlyQbTendency = (avgDraftRoundByPosition["QB"] ?? 10) <= 3;
     const earlyTeTendency = (avgDraftRoundByPosition["TE"] ?? 10) <= 4;
+    const favoriteDraftPositions = Object.entries(
+      teamPicks
+        .filter(p => !p.keeper)
+        .reduce<Record<string, number>>((acc, p) => {
+          const pos = p.position || "?";
+          acc[pos] = (acc[pos] || 0) + 1;
+          return acc;
+        }, {})
+    )
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([pos]) => pos);
+    const repeatedDraftPlayers = Object.entries(
+      teamPicks
+        .filter(p => p.playerName)
+        .reduce<Record<string, number>>((acc, p) => {
+          const name = p.playerName!;
+          acc[name] = (acc[name] || 0) + 1;
+          return acc;
+        }, {})
+    )
+      .filter(([, count]) => count > 1)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, count]) => `${name} (${count}x)`);
+    const earlyRounds = teamPicks.filter(p => p.roundId >= 1 && p.roundId <= 3 && !p.keeper);
+    const earlyPosCounts = earlyRounds.reduce<Record<string, number>>((acc, p) => {
+      const pos = p.position || "?";
+      acc[pos] = (acc[pos] || 0) + 1;
+      return acc;
+    }, {});
+    const earlyRoundPlan = Object.entries(earlyPosCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([pos, count]) => `${pos} ${count}x`)
+      .join(", ") || "No early-round sample";
+    const draftBehaviorSummary = teamPicks.length > 0
+      ? `Draft history: ${teamPicks.length} picks. Favorite positions: ${favoriteDraftPositions.join(", ") || "none"}. Early rounds: ${earlyRoundPlan}${repeatedDraftPlayers.length ? `. Repeat targets: ${repeatedDraftPlayers.join(", ")}` : ""}.`
+      : "No draft history available.";
 
     // GM Archetype derivation
     let gmArchetype = "Balanced Manager";
@@ -569,6 +612,9 @@ export function calcManagerBehavior(
       avgDraftRoundByPosition,
       earlyQbTendency,
       earlyTeTendency,
+      favoriteDraftPositions,
+      repeatedDraftPlayers,
+      draftBehaviorSummary,
       keeperEfficiencyAvg,
       gmArchetype,
       gmArchetypeDesc,

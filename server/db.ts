@@ -16,6 +16,7 @@ import { decryptCredentialsFromDb } from "./_core/crypto";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+type DbClient = ReturnType<typeof drizzle>;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -23,6 +24,25 @@ export async function getDb() {
     catch (error) { console.warn("[Database] Failed to connect:", error); _db = null; }
   }
   return _db;
+}
+
+async function resolveDefaultEspnLeagueId(db: DbClient): Promise<string> {
+  try {
+    const rows = await db
+      .select({ leagueId: leagueConnections.leagueId })
+      .from(leagueConnections)
+      .where(and(eq(leagueConnections.provider, "espn"), eq(leagueConnections.isActive, true)))
+      .orderBy(desc(leagueConnections.updatedAt))
+      .limit(1);
+    if (rows[0]?.leagueId) return rows[0].leagueId;
+  } catch { /* fall back to env/default */ }
+  return process.env.ESPN_LEAGUE_ID ?? "default";
+}
+
+export async function getDefaultEspnLeagueId(): Promise<string> {
+  const db = await getDb();
+  if (!db) return process.env.ESPN_LEAGUE_ID ?? "default";
+  return resolveDefaultEspnLeagueId(db);
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
@@ -60,7 +80,7 @@ export async function getUserByOpenId(openId: string) {
 export async function getCachedView(season: number, viewName: string, leagueId?: string) {
   const db = await getDb();
   if (!db) return null;
-  const lid = leagueId ?? process.env.ESPN_LEAGUE_ID ?? "default";
+  const lid = leagueId ?? await resolveDefaultEspnLeagueId(db);
   // ORDER BY fetchedAt DESC ensures we always get the most recent row.
   // Without this, duplicate rows (from missing unique constraint) could
   // return stale data from an earlier refresh instead of the latest one.
@@ -90,7 +110,7 @@ export async function getCachedView(season: number, viewName: string, leagueId?:
 export async function upsertCachedView(season: number, viewName: string, payload: unknown, leagueId?: string) {
   const db = await getDb();
   if (!db) return;
-  const lid = leagueId ?? process.env.ESPN_LEAGUE_ID ?? "default";
+  const lid = leagueId ?? await resolveDefaultEspnLeagueId(db);
   await db.insert(espnSeasonCache)
     .values({ leagueId: lid, season, viewName, payload: payload as Record<string, unknown> })
     .onDuplicateKeyUpdate({ set: { payload: payload as Record<string, unknown>, updatedAt: new Date() } });
@@ -99,7 +119,7 @@ export async function upsertCachedView(season: number, viewName: string, payload
 export async function getAllCachedSeasons(leagueId?: string): Promise<number[]> {
   const db = await getDb();
   if (!db) return [];
-  const lid = leagueId ?? process.env.ESPN_LEAGUE_ID ?? "default";
+  const lid = leagueId ?? await resolveDefaultEspnLeagueId(db);
   // Include both the exact leagueId and "default" (legacy rows) for backward compat
   const result = await db.selectDistinct({ season: espnSeasonCache.season })
     .from(espnSeasonCache)
