@@ -1,4 +1,5 @@
 // FILE: client/src/pages/hubs/CommandCenter.tsx
+import { useEffect, useState } from "react";
 import AppLayout from "@/components/AppLayout";
 import TodaysMission from "@/components/TodaysMission";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,6 +11,10 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 
 const TRIAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+
+function currentOpenSeason() {
+  return new Date().getFullYear() >= 2026 ? 2026 : 2025;
+}
 
 function TrialBanner() {
   const { user } = useAuth();
@@ -81,10 +86,52 @@ function TrialBanner() {
   );
 }
 
+function LeagueSyncBanner() {
+  const [syncing, setSyncing] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("connected") === "1";
+  });
+  const utils = trpc.useUtils();
+  const season = currentOpenSeason();
+  const { data: cachedSeasons } = trpc.espn.cachedSeasons.useQuery(undefined, {
+    enabled: syncing,
+    refetchInterval: syncing ? 5000 : false,
+  });
+
+  useEffect(() => {
+    if (!syncing || !cachedSeasons?.includes(season)) return;
+    setSyncing(false);
+    utils.espn.cachedSeasons.invalidate();
+    utils.espn.manifests.invalidate();
+    utils.pipeline.health.invalidate();
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("connected");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [cachedSeasons, season, syncing, utils]);
+
+  if (!syncing) return null;
+
+  return (
+    <div className="mx-6 mt-4 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
+      <div className="flex items-center gap-3">
+        <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        <div>
+          <p className="text-sm font-semibold text-foreground">Syncing your league data...</p>
+          <p className="text-xs text-muted-foreground">
+            Your ESPN league is connected. We are loading the {season} season and this will disappear automatically when data is ready.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CommandCenter() {
   return (
     <AppLayout title="Command Center" subtitle="What matters most this week — and what to do about it">
       <TrialBanner />
+      <LeagueSyncBanner />
       <TodaysMission season={2026} />
       <Tabs defaultValue="war-room" className="w-full">
         <div className="px-6 pt-4 border-b border-border">

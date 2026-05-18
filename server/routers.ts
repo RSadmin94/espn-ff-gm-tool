@@ -49,6 +49,7 @@ import {
   isStale,
   staleSummary,
   hasCookies,
+  type EspnCreds,
 } from "./espnService";
 import {
   calcVORP,
@@ -90,6 +91,104 @@ async function getSeasonData(season: number, leagueId?: string) {
     const cached = await getCachedView(season, "combined", lid);
     return cached ? (cached.payload as Record<string, unknown>) : null;
   });
+}
+
+function getCurrentOpenSeason() {
+  return new Date().getFullYear() >= 2026 ? 2026 : 2025;
+}
+
+async function refreshEspnSeasonInBackground(params: {
+  season: number;
+  creds: EspnCreds;
+  userId?: number;
+}) {
+  const { season, creds, userId } = params;
+  try {
+    const db = await getDb();
+    if (db && userId) {
+      await db.update(lcTable)
+        .set({ syncStatus: "pending", syncError: null, updatedAt: new Date() })
+        .where(andDrizzle(
+          eqDrizzle(lcTable.userId, userId),
+          eqDrizzle(lcTable.provider, "espn"),
+          eqDrizzle(lcTable.leagueId, creds.leagueId)
+        ));
+    }
+
+    const pipelineResult = await fetchEspnViewsHardened(season, undefined, creds, userId);
+    const data = pipelineResult.merged;
+
+    for (const vr of pipelineResult.viewResults) {
+      await upsertViewHealth(season, vr.viewName, {
+        status: vr.status === "auth_error" ? "error" : vr.status,
+        errorMessage: vr.error,
+        recordCount: vr.recordCount,
+      });
+    }
+
+    let enrichedData = data;
+    try {
+      const proposals = await fetchTradeProposals(season, creds);
+      enrichedData = mergeTradeProposalsIntoTransactions(data, proposals);
+    } catch { /* non-fatal */ }
+    try {
+      const activityTrades = await fetchRecentActivityTrades(season, enrichedData, creds);
+      if (activityTrades.length > 0) {
+        enrichedData = mergeTradeProposalsIntoTransactions(enrichedData, activityTrades);
+      }
+    } catch { /* non-fatal */ }
+
+    await upsertCachedView(season, "combined", enrichedData, creds.leagueId);
+    try { await upsertLeagueIdentity(season, enrichedData); } catch { /* non-fatal */ }
+
+    const teams = normalizeTeams(enrichedData);
+    const rosters = normalizeRosters(enrichedData);
+    const matchups = normalizeMatchups(enrichedData);
+    const picks = normalizeDraftPicks(enrichedData);
+    const txs = normalizeTransactions(enrichedData);
+    const quality = validateDataQuality(season, data);
+    const overallStatus = pipelineResult.allViewsOk && quality.isUsable ? "success"
+      : pipelineResult.hasPartialData || !quality.isUsable ? "partial"
+      : "success";
+
+    await upsertRefreshManifest(season, {
+      teamCount: teams.length,
+      rosterCount: rosters.length,
+      matchupCount: matchups.length,
+      draftPickCount: picks.length,
+      transactionCount: txs.length,
+      status: overallStatus,
+      viewsRefreshed: pipelineResult.viewResults.filter(v => v.status === "ok").map(v => v.viewName),
+      errorMessage: quality.issues.length > 0 ? quality.issues.join("; ") : undefined,
+    });
+
+    if (db && userId) {
+      await db.update(lcTable)
+        .set({ syncStatus: "ok", syncError: null, lastSyncedAt: new Date(), updatedAt: new Date() })
+        .where(andDrizzle(
+          eqDrizzle(lcTable.userId, userId),
+          eqDrizzle(lcTable.provider, "espn"),
+          eqDrizzle(lcTable.leagueId, creds.leagueId)
+        ));
+    }
+    memCache.invalidateAll();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await upsertRefreshManifest(season, { status: "failed", errorMessage: msg });
+    try {
+      const db = await getDb();
+      if (db && userId) {
+        await db.update(lcTable)
+          .set({ syncStatus: "error", syncError: msg, updatedAt: new Date() })
+          .where(andDrizzle(
+            eqDrizzle(lcTable.userId, userId),
+            eqDrizzle(lcTable.provider, "espn"),
+            eqDrizzle(lcTable.leagueId, creds.leagueId)
+          ));
+      }
+    } catch { /* non-fatal */ }
+    console.error(`[ESPN AutoSync] Season ${season} failed:`, msg);
+  }
 }
 
 /**
@@ -2189,6 +2288,7 @@ export const appRouter = router({
         const seasonsToTry = input.season
           ? [input.season]
           : [currentYear, currentYear - 1, 2026, 2025];
+        let refreshSeason = input.season ?? getCurrentOpenSeason();
 
         // Always guarantee a non-empty leagueName
         let leagueName = testLeagueId ? `ESPN League ${testLeagueId}` : "ESPN League";
@@ -2208,6 +2308,7 @@ export const appRouter = router({
               if (settingsRes.ok) {
                 const data = await settingsRes.json() as Record<string, unknown>;
                 const settings = (data.settings as Record<string, unknown>) || {};
+                refreshSeason = season;
                 if (settings.name) { leagueName = String(settings.name); break; }
               }
             } catch (err) {
@@ -2230,17 +2331,17 @@ export const appRouter = router({
                 provider: "espn",
                 leagueId: testLeagueId || "default",
                 leagueName,
-                season: 2025,
+                season: refreshSeason,
                 isActive: true,
                 credentials: encryptedCreds,
-                syncStatus: "ok",
+                syncStatus: "pending",
               })
               .onDuplicateKeyUpdate({
                 set: {
                   leagueName,
                   isActive: true,
                   credentials: encryptedCreds,
-                  syncStatus: "ok",
+                  syncStatus: "pending",
                   syncError: null,
                   updatedAt: new Date(),
                 },
@@ -2266,7 +2367,12 @@ export const appRouter = router({
           }
         }
 
-        return { success: true, leagueId: testLeagueId };
+        if (ctx.user && testLeagueId) {
+          const creds = { leagueId: testLeagueId, swid, espnS2 };
+          void refreshEspnSeasonInBackground({ season: refreshSeason, creds, userId: ctx.user.id });
+        }
+
+        return { success: true, leagueId: testLeagueId, syncing: Boolean(ctx.user && testLeagueId), syncStatus: "pending" as const };
       }),
 
     // ─── testFetch — diagnostic endpoint: proves DB creds + ESPN API in one shot ───
