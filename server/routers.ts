@@ -1006,7 +1006,7 @@ export const appRouter = router({
 
         // ─── DIAGNOSTIC LOGGING ───
         console.log('[ESPN Refresh] Credential resolution:', JSON.stringify({
-          credSource: activeCreds ? 'db' : 'env',
+          credSource: activeCreds.swid && activeCreds.swid !== (process.env.ESPN_SWID || '') ? 'db' : 'env',
           leagueId: activeLeagueId,
           swidPrefix: activeCreds?.swid ? activeCreds.swid.slice(0, 10) + '...' : (process.env.ESPN_SWID ? process.env.ESPN_SWID.slice(0, 10) + '...' : '(empty)'),
           espnS2Present: !!(activeCreds?.espnS2 || process.env.ESPN_S2),
