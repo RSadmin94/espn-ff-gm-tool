@@ -18,6 +18,7 @@
 import { z } from "zod";
 import { router, publicProcedure } from "./_core/trpc";
 import { getCachedView, getAllCachedSeasons } from "./db";
+import { normalizeDraftPicks } from "./espnService";
 import {
   calcLeagueDNA,
   calcManagerDNA,
@@ -128,8 +129,7 @@ export async function buildManagerRawData(): Promise<ManagerRawData[]> {
     }
 
     // Draft picks
-    const draftDetail = data.draftDetail as Record<string, unknown> | undefined;
-    const picks = (draftDetail?.picks as Record<string, unknown>[]) ?? [];
+    const picks = normalizeDraftPicks(data) as Record<string, unknown>[];
     for (const pick of picks) {
       const teamId = (pick.teamId as number);
       const memberId = teamToMember.get(teamId);
@@ -137,12 +137,18 @@ export async function buildManagerRawData(): Promise<ManagerRawData[]> {
       const mgr = managerMap.get(memberId);
       if (!mgr) continue;
 
-      const posId = (pick.playerInfo as Record<string, unknown>)?.defaultPositionId as number;
-      const position = POS_MAP[posId] ?? "?";
+      const position = (pick.position as string) || "?";
       const round = (pick.roundId as number) ?? 0;
       const keeper = !!(pick.keeper as boolean);
       if (round > 0 && position !== "?") {
-        mgr.draftPicks.push({ season, roundId: round, position, keeper });
+        mgr.draftPicks.push({
+          season,
+          roundId: round,
+          position,
+          keeper,
+          playerId: pick.playerId as number | undefined,
+          playerName: pick.playerName as string | undefined,
+        });
       }
     }
 

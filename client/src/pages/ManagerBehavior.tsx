@@ -88,6 +88,7 @@ export default function ManagerBehavior() {
                   <th className="text-right py-2 px-3">Drops/Yr</th>
                   <th className="text-right py-2 px-3 whitespace-nowrap" title="Avg picks of value saved per keeper (positive = good deal)">Keeper Eff</th>
                   <th className="text-right py-2 px-3">Early QB</th>
+                  <th className="text-left py-2 px-3">Draft Lean</th>
                   <th className="text-right py-2 px-3">Seasons</th>
                   <th className="text-left py-2 px-3">Archetype</th>
                 </tr>
@@ -106,6 +107,9 @@ export default function ManagerBehavior() {
                     </td>
                     <td className={`py-2 px-3 text-right ${m.earlyQbTendency ? "text-orange-400" : "text-slate-400"}`}>
                       {m.earlyQbTendency ? "Yes" : "No"}
+                    </td>
+                    <td className="py-2 px-3 text-slate-300">
+                      {(m.favoriteDraftPositions ?? []).slice(0, 2).join(" / ") || "—"}
                     </td>
                     <td className="py-2 px-3 text-right text-slate-400">{m.seasonsAnalyzed}</td>
                     <td className="py-2 px-3">
@@ -216,6 +220,10 @@ export default function ManagerBehavior() {
                       {m.earlyTeTendency ? "Yes" : "No"}
                     </div>
                   </div>
+                </div>
+
+                <div className="bg-slate-900/40 rounded p-2 text-xs text-slate-300 leading-relaxed">
+                  {m.draftBehaviorSummary ?? "No draft history available."}
                 </div>
               </div>
             </CardContent>

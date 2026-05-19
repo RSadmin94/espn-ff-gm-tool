@@ -6,9 +6,10 @@
 
 import { getDb } from "./db";
 import { fantasyDataCache, adpTrendSnapshots } from "../drizzle/schema";
-import { eq, desc, and, gte } from "drizzle-orm";
+import { eq, desc, and, gte, sql } from "drizzle-orm";
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+let fantasyDataTablesReady = false;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -305,34 +306,80 @@ function mergePlayers(
 
 // ─── Cache helpers ────────────────────────────────────────────────────────────
 
+async function ensureFantasyDataTables(): Promise<void> {
+  if (fantasyDataTablesReady) return;
+  const db = await getDb();
+  if (!db) return;
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS fantasy_data_cache (
+      id int AUTO_INCREMENT NOT NULL,
+      cacheKey varchar(64) NOT NULL,
+      payload json NOT NULL,
+      fetchedAt timestamp NOT NULL DEFAULT (now()),
+      updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fantasy_data_cache_id PRIMARY KEY(id),
+      CONSTRAINT uq_fantasy_cache_key UNIQUE(cacheKey)
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS adp_trend_snapshots (
+      id int AUTO_INCREMENT NOT NULL,
+      fpId int NOT NULL,
+      playerName varchar(128) NOT NULL,
+      position varchar(8) NOT NULL,
+      adp int,
+      ecrRank int NOT NULL,
+      snapshotAt timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT adp_trend_snapshots_id PRIMARY KEY(id)
+    )
+  `);
+
+  try { await db.execute(sql`CREATE INDEX idx_adp_trend_player ON adp_trend_snapshots (fpId)`); } catch { /* index already exists */ }
+  try { await db.execute(sql`CREATE INDEX idx_adp_trend_snapshot ON adp_trend_snapshots (snapshotAt)`); } catch { /* index already exists */ }
+  fantasyDataTablesReady = true;
+}
+
 async function getCached(key: string): Promise<{ data: MergedPlayer[]; fetchedAt: Date } | null> {
   const db = await getDb();
   if (!db) return null;
-  const rows = await db
-    .select()
-    .from(fantasyDataCache)
-    .where(eq(fantasyDataCache.cacheKey, key))
-    .limit(1);
-  if (!rows.length) return null;
-  const row = rows[0];
-  // Check TTL
-  if (Date.now() - row.fetchedAt.getTime() > CACHE_TTL_MS) return null;
-  return { data: row.payload as unknown as MergedPlayer[], fetchedAt: row.fetchedAt };
+  try {
+    await ensureFantasyDataTables();
+    const rows = await db
+      .select()
+      .from(fantasyDataCache)
+      .where(eq(fantasyDataCache.cacheKey, key))
+      .limit(1);
+    if (!rows.length) return null;
+    const row = rows[0];
+    // Check TTL
+    if (Date.now() - row.fetchedAt.getTime() > CACHE_TTL_MS) return null;
+    return { data: row.payload as unknown as MergedPlayer[], fetchedAt: row.fetchedAt };
+  } catch (err) {
+    console.warn("[DraftBoard] Cache read failed; fetching live data instead:", err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 async function setCached(key: string, data: MergedPlayer[]): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db
-    .insert(fantasyDataCache)
-    .values({ cacheKey: key, payload: data as unknown as Record<string, unknown>[] })
-    .onDuplicateKeyUpdate({
-      set: {
-        payload: data as unknown as Record<string, unknown>[],
-        fetchedAt: new Date(),
-        updatedAt: new Date(),
-      },
-    });
+  try {
+    await ensureFantasyDataTables();
+    await db
+      .insert(fantasyDataCache)
+      .values({ cacheKey: key, payload: data as unknown as Record<string, unknown>[] })
+      .onDuplicateKeyUpdate({
+        set: {
+          payload: data as unknown as Record<string, unknown>[],
+          fetchedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+  } catch (err) {
+    console.warn("[DraftBoard] Cache write failed; returning live data without caching:", err instanceof Error ? err.message : err);
+  }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -382,11 +429,18 @@ export async function getDraftBoard(forceRefresh = false): Promise<DraftBoardRes
   if (ecr.length === 0) {
     // ECR is mandatory — fall back to stale cache
     const dbConn = await getDb();
-    const staleRows = dbConn ? await dbConn
-      .select()
-      .from(fantasyDataCache)
-      .where(eq(fantasyDataCache.cacheKey, CACHE_KEY))
-      .limit(1) : [];
+    const staleRows = dbConn ? await (async () => {
+      try {
+        await ensureFantasyDataTables();
+        return await dbConn
+          .select()
+          .from(fantasyDataCache)
+          .where(eq(fantasyDataCache.cacheKey, CACHE_KEY))
+          .limit(1);
+      } catch {
+        return [];
+      }
+    })() : [];
     if (staleRows.length) {
       const stale = staleRows[0];
       return {
@@ -422,6 +476,7 @@ export async function getDraftBoard(forceRefresh = false): Promise<DraftBoardRes
 async function recordAdpSnapshot(players: MergedPlayer[]): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  await ensureFantasyDataTables();
   const now = new Date();
   // Batch insert in chunks of 100 to avoid oversized queries
   const CHUNK = 100;
@@ -453,6 +508,11 @@ export interface AdpTrendEntry {
 export async function getAdpTrend(fpId: number, limit = 10): Promise<AdpTrendEntry[]> {
   const db = await getDb();
   if (!db) return [];
+  try {
+    await ensureFantasyDataTables();
+  } catch {
+    return [];
+  }
   // Only look at snapshots from the last 30 days
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const rows = await db
