@@ -33,6 +33,7 @@ import {
   upsertViewHealth,
   upsertRefreshManifest,
   getRefreshManifests,
+  getDefaultEspnLeagueId,
 } from "./db";
 import { upsertLeagueIdentity } from "./leagueIdentityService";
 import { notifyOwner } from "./_core/notification";
@@ -51,6 +52,7 @@ export async function weeklyIntelHandler(req: Request, res: Response) {
       return res.status(403).json({ error: "cron-only endpoint" });
     }
     taskUid = user.taskUid;
+    const activeLeagueId = await getDefaultEspnLeagueId();
 
     // ── 1. Fetch ESPN data for the current season ──────────────────────────
     const pipelineResult = await fetchEspnViewsHardened(CURRENT_SEASON);
@@ -66,7 +68,7 @@ export async function weeklyIntelHandler(req: Request, res: Response) {
     }
 
     // ── 3. Persist combined cache + league identity ────────────────────────
-    await upsertCachedView(CURRENT_SEASON, "combined", data);
+    await upsertCachedView(CURRENT_SEASON, "combined", data, activeLeagueId);
     try { await upsertLeagueIdentity(CURRENT_SEASON, data); } catch (_e) { /* non-fatal */ }
 
     // ── 4. Normalize and compute quality ──────────────────────────────────

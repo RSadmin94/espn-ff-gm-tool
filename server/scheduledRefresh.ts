@@ -5,6 +5,7 @@ import {
   upsertViewHealth,
   upsertCachedView,
   upsertRefreshManifest,
+  getDefaultEspnLeagueId,
 } from "./db";
 import { upsertLeagueIdentity } from "./leagueIdentityService";
 import {
@@ -34,6 +35,7 @@ export async function espnRefreshHandler(req: Request, res: Response) {
     }
 
     const taskUid = user.taskUid;
+    const activeLeagueId = await getDefaultEspnLeagueId();
     const results: Record<number, {
       status: string;
       viewHealth?: Record<string, string>;
@@ -64,7 +66,7 @@ export async function espnRefreshHandler(req: Request, res: Response) {
           enrichedData = mergeTradeProposalsIntoTransactions(data, proposals);
         } catch (_e) { /* non-fatal — fall back to unmerged data */ }
 
-        await upsertCachedView(season, "combined", enrichedData);
+        await upsertCachedView(season, "combined", enrichedData, activeLeagueId);
         // Persist static identity data (team names, draft order, settings) to league_identity table
         try { await upsertLeagueIdentity(season, enrichedData); } catch (_e) { /* non-fatal */ }
 

@@ -12,6 +12,7 @@ import { espnRefreshHandler } from "../scheduledRefresh";
 import { weeklyIntelHandler } from "../weeklyIntelHandler";
 import { registerAdvisorStreamRoute } from "../advisorStreamHandler";
 import { registerStripeWebhook } from "../stripeWebhook";
+import { runMigrations } from "../runMigrations";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -72,9 +73,18 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
-  });
+  runMigrations()
+    .then(() => {
+      server.listen(port, () => {
+        console.log(`Server running on http://localhost:${port}/`);
+      });
+    })
+    .catch((err) => {
+      console.error("[startup] Migration runner threw unexpectedly:", err);
+      server.listen(port, () => {
+        console.log(`Server running on http://localhost:${port}/`);
+      });
+    });
 }
 
 startServer().catch(console.error);

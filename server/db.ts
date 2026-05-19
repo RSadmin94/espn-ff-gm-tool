@@ -193,6 +193,32 @@ export async function removePickTrade(id: number) {
 
 // ── ESPN View Health helpers ──────────────────────────────────────────────────
 
+/** Active ESPN league id for cron/global jobs (first active DB connection, else env). */
+export async function getDefaultEspnLeagueId(): Promise<string> {
+  const db = await getDb();
+  if (db) {
+    const rows = await db
+      .select({
+        leagueId: leagueConnections.leagueId,
+        credentials: leagueConnections.credentials,
+      })
+      .from(leagueConnections)
+      .where(
+        and(
+          eq(leagueConnections.isActive, true),
+          eq(leagueConnections.provider, "espn")
+        )
+      )
+      .orderBy(desc(leagueConnections.updatedAt))
+      .limit(1);
+    if (rows[0]) {
+      const creds = decryptCredentialsFromDb(rows[0].credentials) as Record<string, string> | null;
+      return (creds?.leagueId as string) ?? rows[0].leagueId;
+    }
+  }
+  return process.env.ESPN_LEAGUE_ID ?? "default";
+}
+
 export async function upsertViewHealth(
   season: number,
   viewName: string,

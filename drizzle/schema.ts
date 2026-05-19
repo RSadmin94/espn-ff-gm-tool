@@ -118,7 +118,7 @@ export const espnViewHealth = mysqlTable(
     fetchedAt: timestamp("fetchedAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  (t) => [index("idx_view_health_season_view").on(t.season, t.viewName)]
+  (t) => [uniqueIndex("uq_season_view").on(t.season, t.viewName)]
 );
 
 export type EspnViewHealth = typeof espnViewHealth.$inferSelect;
