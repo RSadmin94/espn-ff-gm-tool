@@ -225,6 +225,13 @@
       "when": 1778967889489,
       "tag": "0031_rainy_george_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1779081600000,
+      "tag": "0032_restore_fantasy_data_cache",
+      "breakpoints": true
     }
   ]
 }

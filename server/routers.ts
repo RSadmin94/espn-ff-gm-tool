@@ -1388,6 +1388,11 @@ export const appRouter = router({
               proposalPickMap.get(tid)!.push(r);
             }
           }
+          const hasAcceptedTeamAction = (actions: unknown) => {
+            if (!actions || typeof actions !== "object") return false;
+            return Object.values(actions as Record<string, unknown>)
+              .some(action => String(action || "").toUpperCase() === "ACCEPTED");
+          };
 
           // Build set of completed proposal IDs from acceptance rows
           const completedProposalIds = new Set<string>();
@@ -1404,8 +1409,17 @@ export const appRouter = router({
               }
             }
             // 2026 path: ESPN may not emit TRADE_UPHOLD rows for pick-only trades.
-            // Treat TRADE_PROPOSAL rows with status EXECUTED as completed directly.
-            if (r.type === "TRADE_PROPOSAL" && String(r.status || "").toUpperCase() === "EXECUTED") {
+            // Treat actioned TRADE_PROPOSAL rows as completed directly. In the
+            // 2026 cache, ESPN can leave accepted pick trades as PENDING/CANCELED
+            // proposals but mark teamActions with ACCEPTED.
+            if (
+              r.type === "TRADE_PROPOSAL" &&
+              (
+                String(r.status || "").toUpperCase() === "EXECUTED" ||
+                String(r.executionType || "").toUpperCase() === "EXECUTE" ||
+                hasAcceptedTeamAction(r.teamActions)
+              )
+            ) {
               const tid = r.transactionId as string;
               if (tid) {
                 completedProposalIds.add(tid);
@@ -1420,7 +1434,7 @@ export const appRouter = router({
             const status = String(r.status || "").toUpperCase();
             if (type === "TRADE") return status === "" || status === "EXECUTED";
             if (type === "TRADE_PROPOSAL") {
-              return completedProposalIds.has(r.transactionId as string) || status === "EXECUTED";
+              return completedProposalIds.has(r.transactionId as string) || status === "EXECUTED" || hasAcceptedTeamAction(r.teamActions);
             }
             return false;
           };

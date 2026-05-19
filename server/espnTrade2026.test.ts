@@ -191,6 +191,33 @@ describe("normalizeTransactions — 2026 TRADE_UPHOLD/TRADE_ACCEPT format", () =
     }
   });
 
+  it("passes 2026 proposal teamActions and executionType metadata through", () => {
+    const payload = {
+      seasonId: 2026,
+      transactions: [
+        {
+          id: "accepted-actioned-proposal",
+          type: "TRADE_PROPOSAL",
+          status: "CANCELED",
+          executionType: "CANCEL",
+          isPending: true,
+          teamActions: { "11": "ACCEPTED" },
+          proposedDate: 1777667280559,
+          teamId: 11,
+          items: [
+            { fromTeamId: 22, toTeamId: 11, type: "DRAFT_TRADE", playerId: 0, overallPickNumber: 7, player: {} },
+            { fromTeamId: 11, toTeamId: 22, type: "DRAFT_TRADE", playerId: 0, overallPickNumber: 39, player: {} },
+          ],
+        },
+      ],
+    };
+    const rows = normalizeTransactions(payload as Record<string, unknown>) as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(2);
+    expect(rows[0].teamActions).toEqual({ "11": "ACCEPTED" });
+    expect(rows[0].executionType).toBe("CANCEL");
+    expect(rows[0].isPending).toBe(true);
+  });
+
   it("TRADE_UPHOLD row has null playerId (no items)", () => {
     const rows = normalizeTransactions(mock2026Payload as Record<string, unknown>) as Array<Record<string, unknown>>;
     const upholdRow = rows.find(r => r.type === "TRADE_UPHOLD");
@@ -461,12 +488,29 @@ describe("tradeAging — trade grouping and side reconstruction logic", () => {
         .map(r => r.relatedTransactionId as string | null)
         .filter((id): id is string => Boolean(id))
     );
+    const hasAcceptedTeamAction = (actions: unknown) => {
+      if (!actions || typeof actions !== "object") return false;
+      return Object.values(actions as Record<string, unknown>)
+        .some(action => String(action || "").toUpperCase() === "ACCEPTED");
+    };
+    for (const r of txRows) {
+      if (
+        r.type === "TRADE_PROPOSAL" &&
+        (
+          String(r.status || "").toUpperCase() === "EXECUTED" ||
+          String(r.executionType || "").toUpperCase() === "EXECUTE" ||
+          hasAcceptedTeamAction(r.teamActions)
+        )
+      ) {
+        completedProposalIds.add(r.transactionId as string);
+      }
+    }
     const isCompletedTradeRow = (r: Record<string, unknown>) => {
       const type = r.type as string;
       const status = String(r.status || "").toUpperCase();
       if (type === "TRADE") return status === "" || status === "EXECUTED";
       if (type === "TRADE_PROPOSAL") {
-        return completedProposalIds.has(r.transactionId as string) || status === "EXECUTED";
+        return completedProposalIds.has(r.transactionId as string) || status === "EXECUTED" || hasAcceptedTeamAction(r.teamActions);
       }
       return false;
     };
@@ -562,6 +606,32 @@ describe("tradeAging — trade grouping and side reconstruction logic", () => {
     const trades = reconstructTrades(merged);
     // Now the proposal items are present — should create 1 trade group
     expect(trades).toHaveLength(1);
+  });
+
+  it("creates a trade group for 2026 proposals with accepted teamActions despite CANCELED status", () => {
+    const payload = {
+      seasonId: 2026,
+      transactions: [
+        {
+          id: "accepted-actioned-proposal",
+          type: "TRADE_PROPOSAL",
+          status: "CANCELED",
+          executionType: "CANCEL",
+          isPending: true,
+          teamActions: { "11": "ACCEPTED" },
+          proposedDate: 1777667280559,
+          teamId: 11,
+          items: [
+            { fromTeamId: 22, toTeamId: 11, type: "DRAFT_TRADE", playerId: 0, overallPickNumber: 7, player: {} },
+            { fromTeamId: 11, toTeamId: 22, type: "DRAFT_TRADE", playerId: 0, overallPickNumber: 39, player: {} },
+          ],
+        },
+      ],
+    };
+    const trades = reconstructTrades(payload as Record<string, unknown>);
+    expect(trades).toHaveLength(1);
+    expect(trades[0].tradeId).toBe("accepted-actioned-proposal");
+    expect([trades[0].sideA, trades[0].sideB].sort()).toEqual([11, 22]);
   });
 
   it("verdict: sideA wins when they received more value", () => {

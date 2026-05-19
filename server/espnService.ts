@@ -838,6 +838,9 @@ export function normalizeTransactions(data: Record<string, unknown>) {
         toTeamId: null,
         // 2026+: TRADE_UPHOLD/TRADE_ACCEPT records have no items but link to a TRADE_PROPOSAL
         relatedTransactionId: tx.relatedTransactionId ?? null,
+        executionType: tx.executionType ?? null,
+        isPending: tx.isPending ?? null,
+        teamActions: tx.teamActions ?? null,
       });
       continue;
     }
@@ -860,6 +863,9 @@ export function normalizeTransactions(data: Record<string, unknown>) {
         pickInRound: item.pickInRound ?? item.roundPickNumber ?? null,
         // 2026+: pass relatedTransactionId on item rows too (for TRADE_PROPOSAL items)
         relatedTransactionId: tx.relatedTransactionId ?? null,
+        executionType: tx.executionType ?? null,
+        isPending: tx.isPending ?? null,
+        teamActions: tx.teamActions ?? null,
       });
     }
   }
